@@ -52,16 +52,32 @@ export default function Dashboard() {
   // Use demo data if available, otherwise fetch from API
   const { data: apiSummaryData, isLoading: isSummaryLoading, error: summaryError } = useQuery({
     queryKey: ['summary'],
-    queryFn: () => apiClient.getSummary(),
+    queryFn: async () => {
+      const data = await apiClient.getSummary();
+      console.log('Summary API Response:', data);
+      return data;
+    },
     refetchInterval: isDemoMode ? false : 30000, // Auto-refresh every 30 seconds in real mode
     enabled: !isDemoMode, // Only fetch if not in demo mode
+    retry: 1, // Reduce retries to avoid multiple 404s
   });
 
   const { data: apiHistoricalData, isLoading: isHistoricalLoading } = useQuery({
     queryKey: ['historical-summary'],
-    queryFn: () => apiClient.getHistoricalSummary(),
+    queryFn: async () => {
+      try {
+        const data = await apiClient.getHistoricalSummary();
+        console.log('Historical Summary API Response:', data);
+        return data;
+      } catch (error: any) {
+        console.error('Historical summary API error:', error);
+        // Return empty array on error to prevent crashes
+        return [];
+      }
+    },
     refetchInterval: isDemoMode ? false : 30000, // Auto-refresh every 30 seconds in real mode
     enabled: !isDemoMode, // Only fetch if not in demo mode
+    retry: false, // Don't retry on failure to avoid multiple 404s
   });
 
   // Use demo data when available, otherwise use API data
@@ -187,14 +203,22 @@ export default function Dashboard() {
     'breakdown.outward.amount', 'breakdown.outflow.amount'
   ]));
 
-  // Debug log for transaction flow data
-  console.log('Transaction Flow Data:', {
-    inwardCount,
-    outwardCount,
-    inwardAmount,
-    outwardAmount,
-    rawData: currentData
-  });
+  // Debug log for transaction flow data - show detailed structure
+  useEffect(() => {
+    if (currentData && !isDemoMode) {
+      console.log('=== Dashboard Data Structure ===');
+      console.log('Full Summary Data:', currentData);
+      console.log('Inflow/Outflow Data:', currentData?.inflow_outflow);
+      console.log('Breakdown Data:', currentData?.breakdown);
+      console.log('Calculated Values:', {
+        inwardCount,
+        outwardCount,
+        inwardAmount,
+        outwardAmount
+      });
+      console.log('=================================');
+    }
+  }, [currentData, isDemoMode, inwardCount, outwardCount, inwardAmount, outwardAmount]);
 
   // Dispute stats
   const disputeStats = currentData?.disputes || {
@@ -773,11 +797,15 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-green-700">Transaction Count:</span>
-                      <span className="font-bold text-green-800 text-lg">{inwardCount.toLocaleString()}</span>
+                      <span className="font-bold text-green-800 text-lg">
+                        {inwardCount > 0 ? inwardCount.toLocaleString() : '0'}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-green-700">Total Amount:</span>
-                      <span className="font-bold text-green-800 text-lg">₹{(inwardAmount / 10000000).toFixed(2)}Cr</span>
+                      <span className="font-bold text-green-800 text-lg">
+                        ₹{inwardAmount > 0 ? (inwardAmount / 10000000).toFixed(2) : '0.00'}Cr
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -791,11 +819,15 @@ export default function Dashboard() {
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-red-700">Transaction Count:</span>
-                      <span className="font-bold text-red-800 text-lg">{outwardCount.toLocaleString()}</span>
+                      <span className="font-bold text-red-800 text-lg">
+                        {outwardCount > 0 ? outwardCount.toLocaleString() : '0'}
+                      </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-red-700">Total Amount:</span>
-                      <span className="font-bold text-red-800 text-lg">₹{(outwardAmount / 10000000).toFixed(2)}Cr</span>
+                      <span className="font-bold text-red-800 text-lg">
+                        ₹{outwardAmount > 0 ? (outwardAmount / 10000000).toFixed(2) : '0.00'}Cr
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -822,6 +854,16 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              
+              {/* Show message if no data */}
+              {inwardCount === 0 && outwardCount === 0 && !isDemoMode && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-yellow-800">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm">No inward/outward transaction data available. This data may not be included in the current reconciliation run.</span>
+                  </div>
+                </div>
+              )}
             </CardContent>
 
             {/* Trend Comparison Chart */}
