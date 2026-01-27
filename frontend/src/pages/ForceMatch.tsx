@@ -157,11 +157,19 @@ const forceMatchReducer = (state: ForceMatchState, action: ForceMatchAction): Fo
       if (!sourceData) return undefined;
 
       // Extract RRN - prioritize rrn/RRN fields over transaction_id
-      const detailRrn = sourceData.rrn || sourceData.RRN || rrn;
+      let detailRrn = sourceData.rrn || sourceData.RRN || rrn;
       
       // Extract reference/transaction ID separately from RRN
-      const reference = sourceData.upi_tran_id || sourceData.UPI_Tran_ID || 
+      let reference = sourceData.upi_tran_id || sourceData.UPI_Tran_ID || 
                        sourceData.transaction_id || sourceData.reference || '-';
+
+      // Check if RRN field actually contains a transaction ID (starts with TXN)
+      if (detailRrn && (detailRrn.startsWith('TXN') || detailRrn.startsWith('txn'))) {
+        reference = detailRrn; // The "RRN" field is actually the transaction ID
+        // Try to find actual RRN in other fields
+        detailRrn = sourceData.RRN || sourceData.actual_rrn || sourceData.retrieval_reference_number || 
+                   sourceData.reference_number || sourceData.upi_rrn || rrn;
+      }
 
       return {
         rrn: detailRrn,

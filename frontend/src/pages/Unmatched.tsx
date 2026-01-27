@@ -88,10 +88,16 @@ export default function Unmatched() {
     if (format === 'upi_array' && Array.isArray(data)) {
       console.log(`Processing ${data.length} exceptions in UPI array format`);
       
-      data.forEach((exc: any, index: number) => {
+    data.forEach((exc: any, index: number) => {
         if (!exc || typeof exc !== 'object') {
           console.warn(`Skipping invalid exception at index ${index}:`, exc);
           return;
+        }
+
+        // Log first few records to see available fields
+        if (index < 3) {
+          console.log(`Sample transaction ${index}:`, exc);
+          console.log(`Available fields:`, Object.keys(exc));
         }
 
         // Validate required fields - RRN must be present
@@ -101,10 +107,22 @@ export default function Unmatched() {
           return;
         }
 
+        // Check if RRN field actually contains a transaction ID (starts with TXN)
+        let actualRrn = rrn;
+        let actualTxnId = exc.reference || exc.UPI_Tran_ID || exc.upi_tran_id || 'N/A';
+        
+        // If RRN looks like a transaction ID (TXN prefix), swap them
+        if (rrn.startsWith('TXN') || rrn.startsWith('txn')) {
+          actualTxnId = rrn; // The "RRN" field is actually the transaction ID
+          // Try to find actual RRN in other fields
+          actualRrn = exc.RRN || exc.actual_rrn || exc.retrieval_reference_number || 
+                     exc.reference_number || exc.upi_rrn || 'N/A';
+        }
+
         const transaction = {
           source: exc.source || 'NPCI',
-          rrn: rrn,
-          upiTransactionId: exc.reference || exc.UPI_Tran_ID || exc.upi_tran_id || 'N/A',
+          rrn: actualRrn,
+          upiTransactionId: actualTxnId,
           drCr: exc.debit_credit || exc.dr_cr || 'Dr',
           amount: parseFloat(String(exc.amount || 0)) || 0,
           amountFormatted: `₹${(parseFloat(String(exc.amount || 0)) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -237,13 +255,18 @@ export default function Unmatched() {
 
   // Helper function to check if transaction matches all filters
   const matchesFilters = (row: any): boolean => {
-    // RRN search
-    if (searchTerm && !row.rrn.toUpperCase().includes(searchTerm.toUpperCase())) {
-      return false;
+    // RRN search - search in both RRN and Transaction ID fields
+    if (searchTerm) {
+      const searchLower = searchTerm.toUpperCase();
+      const rrnMatch = row.rrn && row.rrn.toUpperCase().includes(searchLower);
+      const txnIdMatch = row.upiTransactionId && row.upiTransactionId.toUpperCase().includes(searchLower);
+      if (!rrnMatch && !txnIdMatch) {
+        return false;
+      }
     }
 
     // Account Number search (mock - in real system would search actual account field)
-    if (accountNumber && !row.upiTransactionId.toUpperCase().includes(accountNumber.toUpperCase())) {
+    if (accountNumber && (!row.upiTransactionId || !row.upiTransactionId.toUpperCase().includes(accountNumber.toUpperCase()))) {
       return false;
     }
 
@@ -461,19 +484,19 @@ export default function Unmatched() {
             value="npci"
             className="data-[state=active]:bg-brand-blue data-[state=active]:text-primary-foreground"
           >
-            NPCI Unmatched ({unmatchedNPCI.length})
+            NPCI Unmatched ({unmatchedNPCI.filter(matchesFilters).length}/{unmatchedNPCI.length})
           </TabsTrigger>
           <TabsTrigger
             value="cbs"
             className="data-[state=active]:bg-brand-blue data-[state=active]:text-primary-foreground"
           >
-            CBS Unmatched ({unmatchedCBS.length})
+            CBS Unmatched ({unmatchedCBS.filter(matchesFilters).length}/{unmatchedCBS.length})
           </TabsTrigger>
           <TabsTrigger
             value="switch"
             className="data-[state=active]:bg-brand-blue data-[state=active]:text-primary-foreground"
           >
-            SWITCH Unmatched ({unmatchedSWITCH.length})
+            SWITCH Unmatched ({unmatchedSWITCH.filter(matchesFilters).length}/{unmatchedSWITCH.length})
           </TabsTrigger>
         </TabsList>
 
@@ -500,11 +523,20 @@ export default function Unmatched() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
                 </div>
-              ) : unmatchedNPCI.filter(matchesFilters).length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  {unmatchedNPCI.length === 0 ? 'No unmatched NPCI transactions found' : 'No transactions match the current filters'}
-                </p>
               ) : (
+                <>
+                  {/* Debug info */}
+                  {unmatchedNPCI.length > 0 && (
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      Showing {unmatchedNPCI.filter(matchesFilters).length} of {unmatchedNPCI.length} transactions
+                    </div>
+                  )}
+                  
+                  {unmatchedNPCI.filter(matchesFilters).length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      {unmatchedNPCI.length === 0 ? 'No unmatched NPCI transactions found' : 'No transactions match the current filters'}
+                    </p>
+                  ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -525,7 +557,15 @@ export default function Unmatched() {
                       .map((row, idx) => (
                         <TableRow key={idx}>
                           <TableCell className="font-medium">{row.source}</TableCell>
-                          <TableCell>{row.rrn}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {row.rrn === 'N/A' ? (
+                              <span className="text-orange-600" title="RRN not available - using Transaction ID">
+                                {row.upiTransactionId}
+                              </span>
+                            ) : (
+                              row.rrn
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{row.upiTransactionId}</TableCell>
                           <TableCell>
                             <span className={row.drCr === "Dr" ? "text-red-600" : "text-green-600"}>
@@ -545,6 +585,8 @@ export default function Unmatched() {
                       ))}
                   </TableBody>
                 </Table>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -573,11 +615,20 @@ export default function Unmatched() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
                 </div>
-              ) : unmatchedCBS.filter(matchesFilters).length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  {unmatchedCBS.length === 0 ? 'No unmatched CBS transactions found' : 'No transactions match the current filters'}
-                </p>
               ) : (
+                <>
+                  {/* Debug info */}
+                  {unmatchedCBS.length > 0 && (
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      Showing {unmatchedCBS.filter(matchesFilters).length} of {unmatchedCBS.length} transactions
+                    </div>
+                  )}
+                  
+                  {unmatchedCBS.filter(matchesFilters).length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      {unmatchedCBS.length === 0 ? 'No unmatched CBS transactions found' : 'No transactions match the current filters'}
+                    </p>
+                  ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -598,7 +649,15 @@ export default function Unmatched() {
                       .map((row, idx) => (
                         <TableRow key={idx}>
                           <TableCell className="font-medium">{row.source}</TableCell>
-                          <TableCell>{row.rrn}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {row.rrn === 'N/A' ? (
+                              <span className="text-orange-600" title="RRN not available - using Transaction ID">
+                                {row.upiTransactionId}
+                              </span>
+                            ) : (
+                              row.rrn
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{row.upiTransactionId}</TableCell>
                           <TableCell>
                             <span className={row.drCr === "Dr" ? "text-red-600" : "text-green-600"}>
@@ -618,6 +677,8 @@ export default function Unmatched() {
                       ))}
                   </TableBody>
                 </Table>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -646,11 +707,20 @@ export default function Unmatched() {
                 <div className="flex justify-center py-8">
                   <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
                 </div>
-              ) : unmatchedSWITCH.filter(matchesFilters).length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  {unmatchedSWITCH.length === 0 ? 'No unmatched SWITCH transactions found' : 'No transactions match the current filters'}
-                </p>
               ) : (
+                <>
+                  {/* Debug info */}
+                  {unmatchedSWITCH.length > 0 && (
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      Showing {unmatchedSWITCH.filter(matchesFilters).length} of {unmatchedSWITCH.length} transactions
+                    </div>
+                  )}
+                  
+                  {unmatchedSWITCH.filter(matchesFilters).length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">
+                      {unmatchedSWITCH.length === 0 ? 'No unmatched SWITCH transactions found' : 'No transactions match the current filters'}
+                    </p>
+                  ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -671,7 +741,15 @@ export default function Unmatched() {
                       .map((row, idx) => (
                         <TableRow key={idx}>
                           <TableCell className="font-medium">{row.source}</TableCell>
-                          <TableCell>{row.rrn}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            {row.rrn === 'N/A' ? (
+                              <span className="text-orange-600" title="RRN not available - using Transaction ID">
+                                {row.upiTransactionId}
+                              </span>
+                            ) : (
+                              row.rrn
+                            )}
+                          </TableCell>
                           <TableCell className="font-mono text-xs">{row.upiTransactionId}</TableCell>
                           <TableCell>
                             <span className={row.drCr === "Dr" ? "text-red-600" : "text-green-600"}>
@@ -691,6 +769,8 @@ export default function Unmatched() {
                       ))}
                   </TableBody>
                 </Table>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
