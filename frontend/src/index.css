@@ -1,0 +1,162 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+
+    --primary: 160 100% 12%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 160 85% 18%;
+    --secondary-foreground: 0 0% 98%;
+
+    --accent: 160 70% 25%;
+    --accent-foreground: 0 0% 98%;
+    
+    --muted: 135 20% 95.9%;
+    --muted-foreground: 135 20% 46.1%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 135 20% 90%;
+    --input: 135 20% 90%;
+    --ring: 134 98% 37%;
+
+    --radius: 0.5rem;
+    
+    /* Custom brand colors */
+    --brand-dark: 200 100% 11%;     /* #001D39 */
+    --brand-blue: 200 75% 24%;      /* #0A4174 */
+    --brand-mid: 200 37% 47%;       /* #49769F */
+    --brand-teal: 195 48% 52%;      /* #4E8EA2 */
+    --brand-aqua: 196 39% 57%;      /* #6EA2B3 */
+    --brand-sky: 201 78% 70%;       /* #7BBDE8 */
+    --brand-light: 200 36% 91%;     /* #BDD8E9 */
+    --brand-purple: 295 75% 35%;    /* #8B1D8F - verif.ai purple */
+    --brand-mint: 165 35% 85%;      /* #C8E6E1 - light mint background */
+    
+    /* Neumorphic shadows */
+    --shadow-neu-light: 10px 10px 20px rgba(163, 177, 198, 0.6), -10px -10px 20px rgba(255, 255, 255, 0.9);
+    --shadow-neu-dark: inset 5px 5px 10px rgba(163, 177, 198, 0.3), inset -5px -5px 10px rgba(255, 255, 255, 0.8);
+
+    --sidebar-background: 160 100% 8%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 160 85% 18%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 160 70% 22%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 160 90% 10%;
+    --sidebar-ring: 160 85% 18%;
+
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 160 85% 18%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 160 100% 12%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 134 98% 37%;
+
+    --sidebar-background: 160 100% 6%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 160 85% 18%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 160 70% 22%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 160 90% 8%;
+    --sidebar-ring: 160 85% 18%;
+
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* Fix cursor blinking issue */
+  * {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+
+  /* Allow text selection for specific elements */
+  input, textarea, [contenteditable="true"], .selectable {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+  }
+
+  /* Remove focus outline that might cause cursor issues */
+  *:focus {
+    outline: none;
+  }
+
+  /* Ensure proper cursor behavior */
+  button, [role="button"], .cursor-pointer {
+    cursor: pointer;
+  }
+
+  /* Prevent text cursor on non-text elements */
+  div, span, p, h1, h2, h3, h4, h5, h6, label {
+    cursor: default;
+  }
+
+  /* Ensure input elements show text cursor */
+  input[type="text"], input[type="email"], input[type="password"], input[type="number"], input[type="date"], textarea {
+    cursor: text;
+  }
+}

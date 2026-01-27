@@ -1,0 +1,65 @@
+{
+  "today_breakup": {
+    "total": 3256,
+    "matched": 2987,
+    "unmatched": 189,
+    "hanging": 56,
+    "exceptions": 24,
+    "inward": {
+      "total": 1834,
+      "matched": 1689,
+      "unmatched": 98,
+      "amount": 145678234.50
+    },
+    "outward": {
+      "total": 1422,
+      "matched": 1298,
+      "unmatched": 91,
+      "amount": 98234567.25
+    }
+  },
+  "recent_transactions": [
+    {
+      "rrn": "636397811101708",
+      "txn_id": "TXN001234",
+      "amount": 15000.00,
+      "date": "2026-01-14",
+      "type": "inward",
+      "status": "matched",
+      "cbs_status": "success",
+      "switch_status": "success",
+      "npci_status": "success"
+    },
+    {
+      "rrn": "636397811101709",
+      "txn_id": "TXN001235",
+      "amount": 8500.00,
+      "date": "2026-01-14",
+      "type": "outward",
+      "status": "unmatched",
+      "cbs_status": "success",
+      "switch_status": "failed",
+      "npci_status": "success"
+    }
+  ],
+  "unmatched_transactions": [
+    {
+      "rrn": "636397811101710",
+      "amount": 12300.00,
+      "date": "2026-01-13",
+      "type": "inward",
+      "reason": "CBS credit found, Switch record missing",
+      "age_days": 1,
+      "priority": "medium"
+    },
+    {
+      "rrn": "636397811101711",
+      "amount": 25000.00,
+      "date": "2026-01-12",
+      "type": "outward",
+      "reason": "NPCI debit found, CBS record missing",
+      "age_days": 2,
+      "priority": "high"
+    }
+  ]
+}

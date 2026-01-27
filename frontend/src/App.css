@@ -1,0 +1,93 @@
+/* Additional cursor and selection fixes */
+
+/* Prevent text selection on UI elements */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection for content areas */
+.allow-select {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Fix for React components that might cause cursor issues */
+[data-radix-popper-content-wrapper] {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Ensure proper cursor for interactive elements */
+button:not(:disabled), 
+[role="button"]:not([aria-disabled="true"]), 
+.cursor-pointer {
+  cursor: pointer !important;
+}
+
+/* Prevent cursor blinking on non-editable elements */
+div:not([contenteditable="true"]), 
+span:not([contenteditable="true"]), 
+p:not([contenteditable="true"]), 
+h1, h2, h3, h4, h5, h6, 
+label:not([for]) {
+  cursor: default !important;
+  caret-color: transparent;
+}
+
+/* Ensure text cursor only appears on text inputs */
+input[type="text"], 
+input[type="email"], 
+input[type="password"], 
+input[type="number"], 
+input[type="search"], 
+input[type="tel"], 
+input[type="url"], 
+input[type="date"], 
+input[type="datetime-local"], 
+input[type="month"], 
+input[type="time"], 
+input[type="week"], 
+textarea, 
+[contenteditable="true"] {
+  cursor: text !important;
+}
+
+/* Hide caret on readonly inputs */
+input[readonly], 
+textarea[readonly] {
+  caret-color: transparent;
+}
+
+/* Animation fixes */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Prevent focus-related cursor issues */
+*:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+/* Remove default focus styles that might cause issues */
+*:focus:not(:focus-visible) {
+  outline: none;
+}

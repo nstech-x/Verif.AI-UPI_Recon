@@ -1,0 +1,12 @@
+{
+  "mappings": {
+    "Remitter Refund TTUM": {"ttum_category": "REFUND"},
+    "Remitter Recovery TTUM": {"ttum_category": "RECOVERY"},
+    "Remitter Refund": {"ttum_category": "REFUND"},
+    "Remitter Recovery": {"ttum_category": "RECOVERY"},
+    "Ignore": {"ttum_category": "IGNORE"},
+    "No Action": {"ttum_category": "IGNORE"},
+    "Hanging": {"ttum_category": "HANG"},
+    "Matched": {"ttum_category": "MATCHED"}
+  }
+}

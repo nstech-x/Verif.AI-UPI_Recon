@@ -1,0 +1,20 @@
+# Use Python 3.11 as the base image (matches your Prerequisites)
+FROM python:3.11-slim
+
+# Set the working directory inside the container
+WORKDIR /app
+
+# Copy requirements and install dependencies
+# We copy this first to leverage Docker cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the backend code
+COPY . .
+
+# Expose port 8000 (FastAPI default)
+EXPOSE 8000
+
+# Command to run the application
+# Note: We use 0.0.0.0 to allow external access inside the container
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]

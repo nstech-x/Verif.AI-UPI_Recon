@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+python-jose
+pydantic
+pandas
+numpy
+openpyxl
+requests
+loguru
+portalocker
+bcrypt
+pytest
+

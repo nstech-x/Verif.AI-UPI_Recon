@@ -1,0 +1,6 @@
+/data/uploads/*
+/data/output/*
+/data/*
+/__pycache__
+/bank_recon_files/*
+/venv

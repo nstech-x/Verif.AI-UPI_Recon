@@ -1,0 +1,64 @@
+{
+  "summary": {
+    "total_transactions": 15847,
+    "total_amount": 458923671.50,
+    "matched": {
+      "count": 14521,
+      "amount": 432156789.25,
+      "percentage": 91.6
+    },
+    "unmatched": {
+      "count": 982,
+      "amount": 21456882.75,
+      "percentage": 6.2
+    },
+    "hanging": {
+      "count": 234,
+      "amount": 4123499.50,
+      "percentage": 1.5
+    },
+    "exceptions": {
+      "count": 110,
+      "amount": 1186500.00,
+      "percentage": 0.7
+    }
+  },
+  "inflow_outflow": {
+    "inward": {
+      "count": 8934,
+      "amount": 267845123.75,
+      "matched": 8245,
+      "unmatched": 512,
+      "hanging": 134,
+      "exceptions": 43
+    },
+    "outward": {
+      "count": 6913,
+      "amount": 191078547.75,
+      "matched": 6276,
+      "unmatched": 470,
+      "hanging": 100,
+      "exceptions": 67
+    }
+  },
+  "recent_runs": [
+    {
+      "run_id": "RUN_20260114_095430",
+      "date": "2026-01-14",
+      "status": "completed",
+      "total": 3256,
+      "matched": 2987,
+      "unmatched": 189,
+      "processing_time": "4.2s"
+    },
+    {
+      "run_id": "RUN_20260113_143022",
+      "date": "2026-01-13",
+      "status": "completed",
+      "total": 4123,
+      "matched": 3845,
+      "unmatched": 198,
+      "processing_time": "5.1s"
+    }
+  ]
+}

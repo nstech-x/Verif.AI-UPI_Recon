@@ -1,0 +1,32 @@
+{
+  "users": [
+    {
+      "username": "admin",
+      "full_name": "System Administrator",
+      "email": "admin@verif.ai",
+      "role": "admin",
+      "permissions": ["view", "create", "approve", "reject", "delete"]
+    },
+    {
+      "username": "maker1",
+      "full_name": "Maker User",
+      "email": "maker@verif.ai",
+      "role": "maker",
+      "permissions": ["view", "create"]
+    },
+    {
+      "username": "checker1",
+      "full_name": "Checker User",
+      "email": "checker@verif.ai",
+      "role": "checker",
+      "permissions": ["view", "approve", "reject"]
+    },
+    {
+      "username": "Verif.AI",
+      "full_name": "UPI Reconciliation System",
+      "email": "system@verif.ai",
+      "role": "system",
+      "permissions": ["view", "create", "approve"]
+    }
+  ]
+}
