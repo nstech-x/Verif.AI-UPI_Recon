@@ -369,8 +369,9 @@ app = FastAPI(title="UPI Reconciliation API", version="1.0.0")
 
 # Add CORS middleware (fine-grained)
 ALLOWED_ORIGINS = [
+    "https://main.d26a5egrgsbb19.amplifyapp.com",
+    "https://verif-ai.onrender.com", 
     "http://localhost:5173",
-    "https://verif-ai.onrender.com"
 ]
 
 app.add_middleware(
