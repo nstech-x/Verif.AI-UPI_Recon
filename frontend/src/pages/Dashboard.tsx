@@ -930,68 +930,7 @@ export default function Dashboard() {
           </Card>
 
 
-          {/* Validation Summary */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle>Validation Summary</CardTitle>
-              <p className="text-sm text-muted-foreground">Transaction validation results and error analysis</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Overall Stats */}
-              <div className="grid grid-cols-4 gap-4">
-                <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
-                  <div className="text-lg font-bold text-green-600">
-                    {currentData?.validation?.passed?.toLocaleString() || '0'}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">Passed</div>
-                </div>
-                <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
-                  <div className="text-lg font-bold text-red-600">
-                    {currentData?.validation?.failed?.toLocaleString() || '0'}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">Failed</div>
-                </div>
-                <div className="text-center p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <div className="text-lg font-bold text-yellow-600">
-                    {currentData?.validation?.warnings?.toLocaleString() || '0'}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">Warnings</div>
-                </div>
-                <div className="text-center p-3 bg-orange-50 rounded-lg border border-orange-200">
-                  <div className="text-lg font-bold text-orange-600">
-                    {currentData?.validation?.criticalErrors?.toLocaleString() || '0'}
-                  </div>
-                  <div className="text-xs text-muted-foreground mt-1">Critical</div>
-                </div>
-              </div>
-
-              {/* Validation by Type */}
-              <div className="border-t pt-4">
-                <h4 className="text-sm font-semibold mb-3">Validation by Type</h4>
-                <div className="space-y-2">
-                  {Object.entries(currentData?.validation?.byType || {}).map(([type, count]) => {
-                    const total = currentData?.validation?.totalValidated || 1;
-                    const percentage = ((count as number / total) * 100).toFixed(1);
-                    return (
-                      <div key={type} className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">{type}</span>
-                        <div className="flex items-center gap-2">
-                          <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-green-500"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-medium w-12 text-right">{percentage}%</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                 </TabsContent>
 
         {/* Today's Breaks Tab */}
         <TabsContent value="breaks" className="space-y-6 mt-6">
