@@ -145,23 +145,31 @@ const forceMatchReducer = (state: ForceMatchState, action: ForceMatchAction): Fo
   }
 };
 
-const transformRawDataToTransactions = (rawData: any): Transaction[] => {
+  const transformRawDataToTransactions = (rawData: any): Transaction[] => {
   if (!rawData || !rawData.data) return [];
 
   return Object.entries(rawData.data).map(([key, record]: [string, any]) => {
     // Use RRN from record data if available, otherwise use the key
-    const rrn = record?.rrn || key;
+    // Ensure we're using the actual RRN field, not transaction_id
+    const rrn = record?.rrn || record?.RRN || key;
 
     const createDetail = (sourceData: any): TransactionDetail | undefined => {
       if (!sourceData) return undefined;
 
+      // Extract RRN - prioritize rrn/RRN fields over transaction_id
+      const detailRrn = sourceData.rrn || sourceData.RRN || rrn;
+      
+      // Extract reference/transaction ID separately from RRN
+      const reference = sourceData.upi_tran_id || sourceData.UPI_Tran_ID || 
+                       sourceData.transaction_id || sourceData.reference || '-';
+
       return {
-        rrn: sourceData.rrn || rrn,
+        rrn: detailRrn,
         amount: parseFloat(sourceData.amount) || 0,
         date: sourceData.date || sourceData.tran_date || '-',
         time: sourceData.time,
         description: sourceData.description,
-        reference: sourceData.reference || sourceData.upi_tran_id,
+        reference: reference,
         debit_credit: sourceData.debit_credit || sourceData.dr_cr,
         status: sourceData.status
       };
@@ -609,9 +617,10 @@ export default function ForceMatch() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
+                      <div><strong>RRN:</strong> {selectedTransaction[panelLHS]?.rrn || selectedTransaction.rrn}</div>
                       <div><strong>Amount:</strong> ₹{selectedTransaction[panelLHS]?.amount?.toLocaleString()}</div>
                       <div><strong>Date:</strong> {selectedTransaction[panelLHS]?.date}</div>
-                      <div><strong>Reference:</strong> {selectedTransaction[panelLHS]?.reference || '-'}</div>
+                      <div><strong>Transaction ID:</strong> {selectedTransaction[panelLHS]?.reference || '-'}</div>
                     </div>
                   </CardContent>
                 </Card>
@@ -621,9 +630,10 @@ export default function ForceMatch() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
+                      <div><strong>RRN:</strong> {selectedTransaction[panelRHS]?.rrn || selectedTransaction.rrn}</div>
                       <div><strong>Amount:</strong> ₹{selectedTransaction[panelRHS]?.amount?.toLocaleString()}</div>
                       <div><strong>Date:</strong> {selectedTransaction[panelRHS]?.date}</div>
-                      <div><strong>Reference:</strong> {selectedTransaction[panelRHS]?.reference || '-'}</div>
+                      <div><strong>Transaction ID:</strong> {selectedTransaction[panelRHS]?.reference || '-'}</div>
                     </div>
                   </CardContent>
                 </Card>

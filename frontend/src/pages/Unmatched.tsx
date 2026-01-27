@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Input } from "../components/ui/input";
 import { Button } from "../components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { Loader2, Download, X } from "lucide-react";
+import { Loader2, Download, X, RefreshCw } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { useToast } from "../hooks/use-toast";
 import CycleSelector from "../components/CycleSelector";
@@ -21,6 +21,7 @@ export default function Unmatched() {
   const [unmatchedCBS, setUnmatchedCBS] = useState<any[]>([]);
   const [unmatchedSWITCH, setUnmatchedSWITCH] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -29,37 +30,47 @@ export default function Unmatched() {
   const [selectedCycle, setSelectedCycle] = useState("all");
   const [selectedDirection, setSelectedDirection] = useState("all");
 
+  const fetchUnmatchedData = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.getLatestUnmatched();
+      console.log('API Response:', response);
+
+      // Transform API response to expected format
+      const transformedData = transformReportToUnmatched(response.data || response.unmatched || [], 'upi_array');
+
+      setUnmatchedNPCI(transformedData.npci);
+      setUnmatchedCBS(transformedData.cbs);
+      setUnmatchedSWITCH(transformedData.switch);
+      setLastRefresh(new Date());
+      console.log(`Real data loaded - NPCI: ${transformedData.npci.length}, CBS: ${transformedData.cbs.length}, SWITCH: ${transformedData.switch.length}`);
+    } catch (error) {
+      console.error('Failed to fetch unmatched data:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load unmatched transactions. Please try again.",
+        variant: "destructive"
+      });
+      // Fallback to empty arrays
+      setUnmatchedNPCI([]);
+      setUnmatchedCBS([]);
+      setUnmatchedSWITCH([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchUnmatchedData = async () => {
-      try {
-        setLoading(true);
-        const response = await apiClient.getLatestUnmatched();
-        console.log('API Response:', response);
-
-        // Transform API response to expected format
-        const transformedData = transformReportToUnmatched(response.data || response.unmatched || [], 'upi_array');
-
-        setUnmatchedNPCI(transformedData.npci);
-        setUnmatchedCBS(transformedData.cbs);
-        setUnmatchedSWITCH(transformedData.switch);
-        console.log(`Real data loaded - NPCI: ${transformedData.npci.length}, CBS: ${transformedData.cbs.length}, SWITCH: ${transformedData.switch.length}`);
-      } catch (error) {
-        console.error('Failed to fetch unmatched data:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load unmatched transactions. Please try again.",
-          variant: "destructive"
-        });
-        // Fallback to empty arrays
-        setUnmatchedNPCI([]);
-        setUnmatchedCBS([]);
-        setUnmatchedSWITCH([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
+    // Initial fetch
     fetchUnmatchedData();
+
+    // Set up auto-refresh every 30 seconds for real-time updates
+    const refreshInterval = setInterval(() => {
+      fetchUnmatchedData();
+    }, 30000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(refreshInterval);
   }, []);
 
   const transformReportToUnmatched = (data: any, format: string = 'legacy') => {
@@ -316,9 +327,26 @@ export default function Unmatched() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Unmatched Dashboard</h1>
-        <p className="text-muted-foreground">View and manage unmatched transactions with advanced filtering</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">Unmatched Dashboard</h1>
+          <p className="text-muted-foreground">View and manage unmatched transactions with advanced filtering</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            Last updated: {lastRefresh.toLocaleTimeString()}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchUnmatchedData}
+            disabled={loading}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}

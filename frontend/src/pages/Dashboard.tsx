@@ -169,11 +169,32 @@ export default function Dashboard() {
   const exceptionsCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['exceptions.count', 'exceptions']));
   const totalCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['totals.count', 'total_transactions', 'total']));
 
-  // Inward/Outward with absolute values
-  const inwardCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['inward.count', 'inflow.count']));
-  const outwardCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['outward.count', 'outflow.count']));
-  const inwardAmount = Math.abs(getFromSummaryOrBreakdown(currentData, ['inward.amount', 'inflow.amount']));
-  const outwardAmount = Math.abs(getFromSummaryOrBreakdown(currentData, ['outward.amount', 'outflow.amount']));
+  // Inward/Outward with absolute values - try multiple possible field names
+  const inwardCount = Math.abs(getFromSummaryOrBreakdown(currentData, [
+    'inward.count', 'inflow.count', 'inflow_outflow.inward.count', 
+    'breakdown.inward.count', 'breakdown.inflow.count'
+  ]));
+  const outwardCount = Math.abs(getFromSummaryOrBreakdown(currentData, [
+    'outward.count', 'outflow.count', 'inflow_outflow.outward.count',
+    'breakdown.outward.count', 'breakdown.outflow.count'
+  ]));
+  const inwardAmount = Math.abs(getFromSummaryOrBreakdown(currentData, [
+    'inward.amount', 'inflow.amount', 'inflow_outflow.inward.amount',
+    'breakdown.inward.amount', 'breakdown.inflow.amount'
+  ]));
+  const outwardAmount = Math.abs(getFromSummaryOrBreakdown(currentData, [
+    'outward.amount', 'outflow.amount', 'inflow_outflow.outward.amount',
+    'breakdown.outward.amount', 'breakdown.outflow.amount'
+  ]));
+
+  // Debug log for transaction flow data
+  console.log('Transaction Flow Data:', {
+    inwardCount,
+    outwardCount,
+    inwardAmount,
+    outwardAmount,
+    rawData: currentData
+  });
 
   // Dispute stats
   const disputeStats = currentData?.disputes || {
