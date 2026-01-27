@@ -214,7 +214,7 @@ export const apiClient = {
 
   // Unmatched Transactions
   getLatestUnmatched: async (): Promise<any> => {
-    const response: AxiosResponse<any> = await api.get('/api/v1/reports/unmatched');
+    const response: AxiosResponse<any> = await api.get('/api/v1/recon/latest/unmatched');
     return response.data;
   },
 

@@ -37,7 +37,7 @@ export default function Unmatched() {
       console.log('API Response:', response);
 
       // Transform API response to expected format
-      const transformedData = transformReportToUnmatched(response.data || response.unmatched || [], 'upi_array');
+      const transformedData = transformReportToUnmatched(response.unmatched || [], 'upi_array');
 
       setUnmatchedNPCI(transformedData.npci);
       setUnmatchedCBS(transformedData.cbs);
