@@ -1,0 +1,60 @@
+{
+  "audit_trail": [
+    {
+      "event_id": "EVT001234",
+      "timestamp": "2026-01-14T09:54:30Z",
+      "event_type": "reconciliation_completed",
+      "run_id": "RUN_20260114_095430",
+      "user": "Verif.AI",
+      "hash": "a7f5d9c3e8b2f4a1c6d8e9f2b3c5d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
+      "prev_hash": "b8e6c0d4f9a3e5b2d7c9f0e1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1",
+      "anchored_to_blockchain": true,
+      "block_number": 125678,
+      "details": {
+        "total_transactions": 3256,
+        "matched": 2987,
+        "unmatched": 189
+      }
+    },
+    {
+      "event_id": "EVT001235",
+      "timestamp": "2026-01-14T10:15:22Z",
+      "event_type": "force_match_approved",
+      "rrn": "636397811101710",
+      "user": "checker1",
+      "maker": "maker1",
+      "hash": "c9f6d1e5a3b4f7c2d8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2",
+      "prev_hash": "a7f5d9c3e8b2f4a1c6d8e9f2b3c5d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
+      "anchored_to_blockchain": true,
+      "block_number": 125679,
+      "details": {
+        "action": "force_match",
+        "amount": 12300.00,
+        "approval_status": "approved"
+      }
+    },
+    {
+      "event_id": "EVT001236",
+      "timestamp": "2026-01-14T11:30:45Z",
+      "event_type": "dispute_raised",
+      "dispute_id": "DSP001235",
+      "user": "maker1",
+      "hash": "d0a7e2f6b4c5d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3",
+      "prev_hash": "c9f6d1e5a3b4f7c2d8e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2",
+      "anchored_to_blockchain": true,
+      "block_number": 125680,
+      "details": {
+        "rrn": "636397811101711",
+        "reason": "Transaction not found in Switch"
+      }
+    }
+  ],
+  "integrity_status": {
+    "total_events": 125680,
+    "verified_blocks": 125680,
+    "failed_verifications": 0,
+    "last_audit": "2026-01-14T12:00:00Z",
+    "blockchain_network": "Hyperledger Fabric",
+    "consensus_algorithm": "PBFT"
+  }
+}

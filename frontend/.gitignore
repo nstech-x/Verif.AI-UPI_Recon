@@ -29,7 +29,14 @@ dist-ssr/
 *.njsproj
 *.sln
 *.sw?
+DOCUMENTS/*
+DOCUMENTS/
+DOCUMENTS/**
 
+kombai/*
+kombai/
+qodo/*
+qodo/
 # TypeScript
 *.tsbuildinfo
 

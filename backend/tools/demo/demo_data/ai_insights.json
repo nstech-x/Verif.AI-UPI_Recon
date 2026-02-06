@@ -1,0 +1,100 @@
+{
+  "match_suggestions": [
+    {
+      "rrn": "636397811101710",
+      "confidence": 92,
+      "suggested_match": "TXN001240",
+      "reasons": [
+        "Amount exact match (₹12,300.00)",
+        "Date match (2026-01-13)",
+        "Reference number similarity (98%)",
+        "Historical pattern match"
+      ],
+      "feature_weights": {
+        "amount": 0.35,
+        "date": 0.25,
+        "reference": 0.30,
+        "pattern": 0.10
+      }
+    },
+    {
+      "rrn": "636397811101711",
+      "confidence": 87,
+      "suggested_match": "TXN001245",
+      "reasons": [
+        "Amount match within tolerance",
+        "Same transaction date",
+        "Customer pattern recognized"
+      ],
+      "feature_weights": {
+        "amount": 0.40,
+        "date": 0.30,
+        "customer": 0.30
+      }
+    }
+  ],
+  "exception_clusters": [
+    {
+      "cluster_id": "CL001",
+      "type": "recurring",
+      "count": 23,
+      "pattern": "Missing CBS entries during 2-3 PM window",
+      "suggested_action": "Check CBS batch processing schedule",
+      "priority": "high"
+    },
+    {
+      "cluster_id": "CL002",
+      "type": "settlement_delay",
+      "count": 15,
+      "pattern": "NPCI settlement delay for specific merchant",
+      "suggested_action": "Flag for manual review",
+      "priority": "medium"
+    }
+  ],
+  "anomaly_detection": [
+    {
+      "transaction_id": "TXN001250",
+      "anomaly_type": "high_value",
+      "amount": 250000.00,
+      "threshold": 100000.00,
+      "risk_score": 8.5,
+      "recommendation": "Manual verification required"
+    }
+  ],
+  "chatbot_contexts": {
+    "faq": [
+      {
+        "question": "How do I reconcile a transaction?",
+        "answer": "Navigate to the Reconciliation page, select the transaction type, and click 'Run Reconciliation'. The system will match transactions across CBS, Switch, and NPCI."
+      },
+      {
+        "question": "What is a hanging transaction?",
+        "answer": "A hanging transaction is one that is stuck in an intermediate state, typically pending from a previous or next settlement cycle."
+      },
+      {
+        "question": "How do I resolve unmatched transactions?",
+        "answer": "Review unmatched transactions in the Unmatched page. You can use Force Match for manual matching or let Auto-Match handle them based on configured parameters."
+      }
+    ],
+    "dispute_guidance": [
+      {
+        "scenario": "Amount mismatch between CBS and NPCI",
+        "steps": [
+          "Verify source amounts in CBS and NPCI",
+          "Check for currency conversion issues",
+          "Review transaction fees/charges",
+          "Raise dispute if discrepancy persists"
+        ]
+      },
+      {
+        "scenario": "Transaction not found in Switch",
+        "steps": [
+          "Verify transaction date and time",
+          "Check Switch system logs",
+          "Confirm transaction was routed through Switch",
+          "Escalate to technical team if missing"
+        ]
+      }
+    ]
+  }
+}

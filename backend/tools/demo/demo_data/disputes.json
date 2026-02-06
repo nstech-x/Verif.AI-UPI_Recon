@@ -1,0 +1,33 @@
+{
+  "summary": {
+    "total": 247,
+    "open": 89,
+    "working": 124,
+    "closed": 34
+  },
+  "by_amount": {
+    "received": 12456780.50,
+    "reverted": 8234567.25,
+    "pending": 4222213.25
+  },
+  "disputes": [
+    {
+      "id": "DSP001234",
+      "rrn": "636397811101708",
+      "amount": 15000.00,
+      "status": "working",
+      "raised_date": "2026-01-10",
+      "reason": "Amount mismatch between CBS and NPCI",
+      "assigned_to": "Checker Team"
+    },
+    {
+      "id": "DSP001235",
+      "rrn": "636397811101709",
+      "amount": 8500.00,
+      "status": "open",
+      "raised_date": "2026-01-12",
+      "reason": "Transaction not found in Switch",
+      "assigned_to": "Unassigned"
+    }
+  ]
+}
