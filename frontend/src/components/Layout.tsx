@@ -34,18 +34,23 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const menuItems = [
+interface MenuItem {
+  path: string;
+  label: string;
+  icon: any;
+  disabled?: boolean;
+  hidden?: boolean;
+}
+
+const menuItems: MenuItem[] = [
   { path: "/", label: "Dashboard", icon: LayoutDashboard },
   { path: "/file-upload", label: "File Upload", icon: Upload },
   { path: "/view-status", label: "View Upload Status", icon: Eye },
   { path: "/recon", label: "Run Reconciliation", icon: BarChart3 },
   { path: "/unmatched", label: "Unmatched Dashboard", icon: AlertCircle },
   { path: "/force-match", label: "Force - Match", icon: GitMerge },
-  { path: "/auto-match", label: "Auto-Match", icon: PlayCircle },
+  { path: "/auto-match", label: "Auto-Match", icon: PlayCircle, disabled: true, hidden: true },
   { path: "/rollback", label: "Roll-Back", icon: RotateCcw },
-  // { path: "/watchlist", label: "Watchlist", icon: EyeOff },
-  { path: "/maker-checker", label: "User Management", icon: UserCheck },
-  { path: "/disputes", label: "Dispute Management", icon: Scale },
   { path: "/cycle-skip", label: "NPCI Cycle Skip", icon: RefreshCcw },
   { path: "/income-expense", label: "Income & Expense", icon: TrendingUp },
   { path: "/enquiry", label: "Ask Verif.AI", icon: MessageSquare },
@@ -59,6 +64,11 @@ export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [isCollapsed, setIsCollapsed] = useState(true); // Start collapsed
+
+  // Scroll to top on location change
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [location.pathname]);
 
   // Load saved state from localStorage
   useEffect(() => {
@@ -143,6 +153,11 @@ export default function Layout({ children }: LayoutProps) {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
 
+              // Skip hidden items
+              if (item.hidden) {
+                return null;
+              }
+
               // Hide certain menu items for Maker-only users
               if (user?.role === 'Maker' && (item.label === 'Force - Match' || item.label === 'Roll-Back')) {
                 return null;
@@ -156,7 +171,8 @@ export default function Layout({ children }: LayoutProps) {
                     isActive
                       ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-lg"
                       : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                    isCollapsed && "justify-center px-2"
+                    isCollapsed && "justify-center px-2",
+                    item.disabled && "opacity-50 cursor-not-allowed pointer-events-none"
                   )}
                 >
                   <Icon className="w-5 h-5 flex-shrink-0" />
@@ -207,7 +223,7 @@ export default function Layout({ children }: LayoutProps) {
             draggable={false}
           />
         </div>
-        <div className="flex-1 overflow-auto">
+        <div key={location.pathname} className="flex-1 overflow-auto">
           {children}
         </div>
       </main>

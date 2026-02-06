@@ -23,7 +23,11 @@ export default function DashboardDateFilter({
     const today = new Date().toISOString().split('T')[0];
     setDateFrom(today);
     setDateTo(today);
-  }, []);
+    // Notify parent of initial date range so embedded modules receive dates
+    if (onDateChange) {
+      onDateChange(today, today);
+    }
+  }, [onDateChange]);
 
   const handleDateChange = (from: string, to: string) => {
     setDateFrom(from);

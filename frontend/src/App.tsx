@@ -3,7 +3,7 @@ import { Toaster } from "./components/ui/toaster";
 import { Toaster as Sonner } from "./components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DateProvider } from "./contexts/DateContext";
 import { DemoDataProvider } from "./contexts/DemoDataContext";
@@ -50,8 +50,10 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 
 // App Routes component
 const AppRoutes = () => {
+  const location = useLocation();
+  
   return (
-    <Routes>
+    <Routes location={location} key={location.pathname}>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><Layout><Dashboard /></Layout></ProtectedRoute>} />
       <Route path="/upload" element={<ProtectedRoute><Layout><FileUpload /></Layout></ProtectedRoute>} />
@@ -68,8 +70,8 @@ const AppRoutes = () => {
       <Route path="/ai-showcase" element={<ProtectedRoute><Layout><AIShowcase /></Layout></ProtectedRoute>} />
       <Route path="/blockchain" element={<ProtectedRoute><Layout><BlockchainAudit /></Layout></ProtectedRoute>} />
       {/* <Route path="/watchlist" element={<ProtectedRoute><Layout><Watchlist /></Layout></ProtectedRoute>} /> */}
-      <Route path="/maker-checker" element={<ProtectedRoute><Layout><MakerChecker /></Layout></ProtectedRoute>} />
-      <Route path="/disputes" element={<ProtectedRoute><Layout><Disputes /></Layout></ProtectedRoute>} />
+      <Route path="/dashboard/maker-checker" element={<ProtectedRoute><Layout><MakerChecker /></Layout></ProtectedRoute>} />
+      <Route path="/dashboard/disputes" element={<ProtectedRoute><Layout><Disputes /></Layout></ProtectedRoute>} />
       <Route path="/cycle-skip" element={<ProtectedRoute><Layout><CycleSkip /></Layout></ProtectedRoute>} />
       <Route path="/income-expense" element={<ProtectedRoute><Layout><IncomeExpenseDashboard /></Layout></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />

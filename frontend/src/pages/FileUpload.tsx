@@ -435,28 +435,9 @@ export default function FileUpload() {
                 {/* NTSL File */}
                 <div className="space-y-3">
                   <Label className="text-base font-semibold">NTSL File</Label>
-                  <div className="flex gap-2 flex-wrap">
-                    {Array.from({ length: 10 }, (_, i) => {
-                      const cycleId = `${i + 1}C`;
-                      const isSelected = selectedCycles.ntsl === cycleId;
-                      return (
-                        <Button
-                          key={i}
-                          variant={isSelected ? "default" : "outline"}
-                          size="sm"
-                          className={`rounded-full ${isSelected ? 'bg-brand-blue text-white' : ''}`}
-                          onClick={() => setSelectedCycles(prev => ({ ...prev, ntsl: cycleId }))}
-                        >
-                          {cycleId}
-                        </Button>
-                      );
-                    })}
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Cycle for NTSL will be auto-detected from filename or file content.
                   </div>
-                  {selectedCycles.ntsl && (
-                    <p className="text-sm text-muted-foreground">
-                      Selected Cycle: {selectedCycles.ntsl}
-                    </p>
-                  )}
                   <Button
                     variant="outline"
                     className="rounded-full px-8"

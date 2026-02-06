@@ -1,7 +1,23 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Skeleton } from "../components/ui/skeleton";
 import CycleSelector from "../components/CycleSelector";
 import DirectionSelector from "../components/DirectionSelector";
@@ -11,10 +27,36 @@ import DemoBadge from "../components/DemoBadge";
 import { useDemoData } from "../contexts/DemoDataContext";
 import { useFilters } from "../hooks/useFilters";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar, ScatterChart, Scatter, Area, AreaChart
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  ScatterChart,
+  Scatter,
+  Area,
+  AreaChart,
 } from "recharts";
-import { RefreshCw, AlertCircle, CheckCircle2, TrendingUp, PieChart as PieChartIcon, BarChart3, Activity, Upload, Check, Scale } from "lucide-react";
+import {
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
+  TrendingUp,
+  PieChart as PieChartIcon,
+  BarChart3,
+  Activity,
+  Upload,
+  Check,
+  Scale,
+} from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
   Carousel,
@@ -25,24 +67,27 @@ import {
 } from "../components/ui/carousel";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../lib/api";
+import Disputes from "./Disputes";
+import MakerChecker from "./MakerChecker";
 
 // Historical data will be fetched from API
 
 // Use distinct colors for charts - Bank/Compliance appropriate palette
 const CHART_COLORS = {
-  matched: "#10b981",      // Green for matched transactions
-  unmatched: "#ef4444",    // Red for unmatched/errors
-  brandBlue: "#3b82f6",    // Primary blue
-  brandSky: "#0ea5e9",     // Sky blue for contrast
-  allTxns: "#6366f1",      // Indigo for total transactions
-  reconciled: "#22c55e",   // Bright green for reconciled
-  purple: "#a855f7",       // Purple for variety
-  amber: "#f59e0b",        // Amber for warnings
+  matched: "#10b981", // Green for matched transactions
+  unmatched: "#ef4444", // Red for unmatched/errors
+  brandBlue: "#3b82f6", // Primary blue
+  brandSky: "#0ea5e9", // Sky blue for contrast
+  allTxns: "#6366f1", // Indigo for total transactions
+  reconciled: "#22c55e", // Bright green for reconciled
+  purple: "#a855f7", // Purple for variety
+  amber: "#f59e0b", // Amber for warnings
 };
 
 export default function Dashboard() {
   const { isDemoMode, demoSummary, demoHistorical } = useDemoData();
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<string>("recon");
   const [txnType, setTxnType] = useState("all");
   const [txnCategory, setTxnCategory] = useState("all");
   const [selectedCycle, setSelectedCycle] = useState("all");
@@ -50,55 +95,61 @@ export default function Dashboard() {
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   // Use demo data if available, otherwise fetch from API
-  const { data: apiSummaryData, isLoading: isSummaryLoading, error: summaryError } = useQuery({
-    queryKey: ['summary'],
+  const {
+    data: apiSummaryData,
+    isLoading: isSummaryLoading,
+    error: summaryError,
+  } = useQuery({
+    queryKey: ["summary"],
     queryFn: async () => {
       const data = await apiClient.getSummary();
-      console.log('Summary API Response:', data);
+      console.log("Summary API Response:", data);
       return data;
     },
-    refetchInterval: isDemoMode ? false : 30000, // Auto-refresh every 30 seconds in real mode
+    staleTime: 60000, // Data stays fresh for 60 seconds to avoid constant refetches
+    refetchInterval: isDemoMode ? false : 120000, // Auto-refresh every 2 minutes in real mode (increased from 30s)
     enabled: !isDemoMode, // Only fetch if not in demo mode
-    retry: 1, // Reduce retries to avoid multiple 404s
+    retry: 0, // Disable retries to fail fast if backend is down
   });
 
   const { data: apiHistoricalData, isLoading: isHistoricalLoading } = useQuery({
-    queryKey: ['historical-summary'],
+    queryKey: ["historical-summary"],
     queryFn: async () => {
       try {
         const data = await apiClient.getHistoricalSummary();
-        console.log('Historical Summary API Response:', data);
+        console.log("Historical Summary API Response:", data);
         return data;
       } catch (error: any) {
-        console.error('Historical summary API error:', error);
+        console.error("Historical summary API error:", error);
         // Return empty array on error to prevent crashes
         return [];
       }
     },
-    refetchInterval: isDemoMode ? false : 30000, // Auto-refresh every 30 seconds in real mode
+    staleTime: 60000, // Data stays fresh for 60 seconds
+    refetchInterval: isDemoMode ? false : 120000, // Auto-refresh every 2 minutes in real mode (increased from 30s)
     enabled: !isDemoMode, // Only fetch if not in demo mode
-    retry: false, // Don't retry on failure to avoid multiple 404s
+    retry: 0, // Disable retries to fail fast
   });
 
   // Use demo data when available, otherwise use API data
   const summaryData = isDemoMode ? demoSummary : apiSummaryData;
-  const historicalData = isDemoMode ? demoHistorical : (apiHistoricalData || []);
+  const historicalData = isDemoMode ? demoHistorical : apiHistoricalData || [];
 
   // Function to refresh all dashboard data
   const refreshDashboardData = () => {
     if (!isDemoMode) {
-      queryClient.invalidateQueries({ queryKey: ['summary'] });
-      queryClient.invalidateQueries({ queryKey: ['historical-summary'] });
+      queryClient.invalidateQueries({ queryKey: ["summary"] });
+      queryClient.invalidateQueries({ queryKey: ["historical-summary"] });
       setLastRefresh(new Date());
     }
   };
 
-  // Auto-refresh every 30 seconds when not in demo mode
+  // Auto-refresh every 2 minutes when not in demo mode (increased from 30 seconds to reduce API load)
   useEffect(() => {
     if (!isDemoMode) {
       const interval = setInterval(() => {
         refreshDashboardData();
-      }, 30000);
+      }, 120000); // 2 minutes
       return () => clearInterval(interval);
     }
   }, [isDemoMode, queryClient]);
@@ -110,16 +161,22 @@ export default function Dashboard() {
     };
 
     // Listen for file upload completion
-    window.addEventListener('fileUploadComplete', handleRefreshDashboard);
+    window.addEventListener("fileUploadComplete", handleRefreshDashboard);
     // Listen for reconciliation completion
-    window.addEventListener('reconciliationComplete', handleRefreshDashboard);
+    window.addEventListener("reconciliationComplete", handleRefreshDashboard);
     // Listen for filter changes
-    window.addEventListener('dashboardFiltersChanged', handleRefreshDashboard);
+    window.addEventListener("dashboardFiltersChanged", handleRefreshDashboard);
 
     return () => {
-      window.removeEventListener('fileUploadComplete', handleRefreshDashboard);
-      window.removeEventListener('reconciliationComplete', handleRefreshDashboard);
-      window.removeEventListener('dashboardFiltersChanged', handleRefreshDashboard);
+      window.removeEventListener("fileUploadComplete", handleRefreshDashboard);
+      window.removeEventListener(
+        "reconciliationComplete",
+        handleRefreshDashboard,
+      );
+      window.removeEventListener(
+        "dashboardFiltersChanged",
+        handleRefreshDashboard,
+      );
     };
   }, [isDemoMode, queryClient]);
 
@@ -131,7 +188,7 @@ export default function Dashboard() {
     resetFilters,
     filteredSummary,
     filteredHistorical,
-    hasActiveFilters
+    hasActiveFilters,
   } = useFilters(summaryData, historicalData);
 
   const refreshData = () => {
@@ -141,14 +198,24 @@ export default function Dashboard() {
   const handleDateFilterChange = (dateFrom: string, dateTo: string) => {
     updateDateRange(dateFrom, dateTo);
     // Trigger dashboard refresh when filters change
-    window.dispatchEvent(new CustomEvent('dashboardFiltersChanged'));
+    window.dispatchEvent(new CustomEvent("dashboardFiltersChanged"));
+  };
+
+  // Keep local date range state to pass to embedded modules
+  const [embeddedDateFrom, setEmbeddedDateFrom] = useState<string>("");
+  const [embeddedDateTo, setEmbeddedDateTo] = useState<string>("");
+
+  const handleEmbeddedDateChange = (dateFrom: string, dateTo: string) => {
+    setEmbeddedDateFrom(dateFrom);
+    setEmbeddedDateTo(dateTo);
+    handleDateFilterChange(dateFrom, dateTo);
   };
 
   // Helper function to safely extract numeric values from summary data
   const getNumericValue = (data: any, keys: string[]): number => {
     for (const key of keys) {
-      const value = key.split('.').reduce((obj, k) => obj?.[k], data);
-      if (typeof value === 'number' && !isNaN(value)) return value;
+      const value = key.split(".").reduce((obj, k) => obj?.[k], data);
+      if (typeof value === "number" && !isNaN(value)) return value;
     }
     return 0;
   };
@@ -158,15 +225,17 @@ export default function Dashboard() {
     // Try from summary object first
     if (data?.summary) {
       for (const key of keys) {
-        const value = key.split('.').reduce((obj, k) => obj?.[k], data.summary);
-        if (typeof value === 'number' && !isNaN(value)) return value;
+        const value = key.split(".").reduce((obj, k) => obj?.[k], data.summary);
+        if (typeof value === "number" && !isNaN(value)) return value;
       }
     }
     // Try from breakdown object
     if (data?.breakdown) {
       for (const key of keys) {
-        const value = key.split('.').reduce((obj, k) => obj?.[k], data.breakdown);
-        if (typeof value === 'number' && !isNaN(value)) return value;
+        const value = key
+          .split(".")
+          .reduce((obj, k) => obj?.[k], data.breakdown);
+        if (typeof value === "number" && !isNaN(value)) return value;
       }
     }
     // Fallback to top-level
@@ -178,47 +247,79 @@ export default function Dashboard() {
   const currentHistorical = filteredHistorical;
 
   // Extract values with demo data fallback
-  const matchedCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['matched.count', 'matched', 'reconciled']));
-  const partialMatchesCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['partial_matches.count', 'partial_matches']));
-  const hangingCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['hanging.count', 'hanging']));
-  const unmatchedCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['unmatched.count', 'unmatched', 'breaks']));
-  const exceptionsCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['exceptions.count', 'exceptions']));
-  const totalCount = Math.abs(getFromSummaryOrBreakdown(currentData, ['totals.count', 'total_transactions', 'total']));
+  const matchedCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "matched.count",
+      "matched",
+      "reconciled",
+    ]),
+  );
+  const partialMatchesCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "partial_matches.count",
+      "partial_matches",
+    ]),
+  );
+  const hangingCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, ["hanging.count", "hanging"]),
+  );
+  const unmatchedCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "unmatched.count",
+      "unmatched",
+      "breaks",
+    ]),
+  );
+  const exceptionsCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, ["exceptions.count", "exceptions"]),
+  );
+  const totalCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "totals.count",
+      "total_transactions",
+      "total",
+    ]),
+  );
 
   // Inward/Outward with absolute values - try multiple possible field names
-  const inwardCount = Math.abs(getFromSummaryOrBreakdown(currentData, [
-    'inward.count', 'inflow.count', 'inflow_outflow.inward.count', 
-    'breakdown.inward.count', 'breakdown.inflow.count'
-  ]));
-  const outwardCount = Math.abs(getFromSummaryOrBreakdown(currentData, [
-    'outward.count', 'outflow.count', 'inflow_outflow.outward.count',
-    'breakdown.outward.count', 'breakdown.outflow.count'
-  ]));
-  const inwardAmount = Math.abs(getFromSummaryOrBreakdown(currentData, [
-    'inward.amount', 'inflow.amount', 'inflow_outflow.inward.amount',
-    'breakdown.inward.amount', 'breakdown.inflow.amount'
-  ]));
-  const outwardAmount = Math.abs(getFromSummaryOrBreakdown(currentData, [
-    'outward.amount', 'outflow.amount', 'inflow_outflow.outward.amount',
-    'breakdown.outward.amount', 'breakdown.outflow.amount'
-  ]));
+  const inwardCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "inward.count",
+      "inflow.count",
+      "inflow_outflow.inward.count",
+      "breakdown.inward.count",
+      "breakdown.inflow.count",
+    ]),
+  );
+  const outwardCount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "outward.count",
+      "outflow.count",
+      "inflow_outflow.outward.count",
+      "breakdown.outward.count",
+      "breakdown.outflow.count",
+    ]),
+  );
+  const inwardAmount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "inward.amount",
+      "inflow.amount",
+      "inflow_outflow.inward.amount",
+      "breakdown.inward.amount",
+      "breakdown.inflow.amount",
+    ]),
+  );
+  const outwardAmount = Math.abs(
+    getFromSummaryOrBreakdown(currentData, [
+      "outward.amount",
+      "outflow.amount",
+      "inflow_outflow.outward.amount",
+      "breakdown.outward.amount",
+      "breakdown.outflow.amount",
+    ]),
+  );
 
-  // Debug log for transaction flow data - show detailed structure
-  useEffect(() => {
-    if (currentData && !isDemoMode) {
-      console.log('=== Dashboard Data Structure ===');
-      console.log('Full Summary Data:', currentData);
-      console.log('Inflow/Outflow Data:', currentData?.inflow_outflow);
-      console.log('Breakdown Data:', currentData?.breakdown);
-      console.log('Calculated Values:', {
-        inwardCount,
-        outwardCount,
-        inwardAmount,
-        outwardAmount
-      });
-      console.log('=================================');
-    }
-  }, [currentData, isDemoMode, inwardCount, outwardCount, inwardAmount, outwardAmount]);
+  // Removed debug effect to prevent infinite loop - calculated values change on every render
 
   // Dispute stats
   const disputeStats = currentData?.disputes || {
@@ -227,17 +328,24 @@ export default function Dashboard() {
     working: 0,
     closed: 0,
     byCategory: {},
-    tatBreached: 0
+    tatBreached: 0,
   };
 
-  const pieData = currentData ? [
-    { name: "Matched", value: matchedCount, color: CHART_COLORS.reconciled },
-    { name: "Unmatched", value: unmatchedCount, color: CHART_COLORS.unmatched },
-    { name: "Hanging", value: hangingCount, color: CHART_COLORS.amber },
-  ].filter(item => item.value > 0) : []; // Only show categories with data
-
-
-
+  const pieData = currentData
+    ? [
+        {
+          name: "Matched",
+          value: matchedCount,
+          color: CHART_COLORS.reconciled,
+        },
+        {
+          name: "Unmatched",
+          value: unmatchedCount,
+          color: CHART_COLORS.unmatched,
+        },
+        { name: "Hanging", value: hangingCount, color: CHART_COLORS.amber },
+      ].filter((item) => item.value > 0)
+    : []; // Only show categories with data
 
   // DEMO MODE: Always show data immediately
 
@@ -252,14 +360,20 @@ export default function Dashboard() {
           </div>
           <p className="text-muted-foreground">UPI Reconciliation Overview</p>
           <p className="text-sm text-muted-foreground mt-1">
-            {isDemoMode ? 'Demo' : "Today's"} Reconciliation: {totalCount.toLocaleString()} transactions processed
+            {isDemoMode ? "Demo" : "Today's"} Reconciliation:{" "}
+            {totalCount.toLocaleString()} transactions processed
           </p>
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground">
             Last updated: {lastRefresh.toLocaleTimeString()}
           </span>
-          <Button variant="outline" size="sm" onClick={refreshData} className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={refreshData}
+            className="gap-2"
+          >
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
@@ -268,7 +382,7 @@ export default function Dashboard() {
 
       {/* Dashboard Date Filter - Only on Dashboard */}
       <DashboardDateFilter
-        onDateChange={handleDateFilterChange}
+        onDateChange={handleEmbeddedDateChange}
         onRefresh={refreshData}
         className="mb-4"
       />
@@ -281,16 +395,15 @@ export default function Dashboard() {
         hasActiveFilters={hasActiveFilters}
       /> */}
 
-
-
-
       {/* Error Display */}
       {summaryError && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-red-600">
               <AlertCircle className="h-4 w-4" />
-              <span>Failed to load dashboard data. Please check backend connection.</span>
+              <span>
+                Failed to load dashboard data. Please check backend connection.
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -302,23 +415,47 @@ export default function Dashboard() {
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-blue-600">
               <AlertCircle className="h-4 w-4" />
-              <span>No reconciliation data available. Please upload files and run reconciliation first.</span>
+              <span>
+                No reconciliation data available. Please upload files and run
+                reconciliation first.
+              </span>
             </div>
           </CardContent>
         </Card>
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="recon" className="w-full">
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val)} className="w-full">
         <TabsList className="bg-muted/30">
-          <TabsTrigger value="recon" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsTrigger
+            value="recon"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
             Recon Dashboard
           </TabsTrigger>
-          <TabsTrigger value="breaks" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsTrigger
+            value="breaks"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
             Today's Recon
           </TabsTrigger>
-          <TabsTrigger value="datewise" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+          <TabsTrigger
+            value="datewise"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
             Date-wise Details
+          </TabsTrigger>
+          <TabsTrigger
+            value="disputes"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            Disputes
+          </TabsTrigger>
+          <TabsTrigger
+            value="users"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            User Management
           </TabsTrigger>
         </TabsList>
 
@@ -330,11 +467,15 @@ export default function Dashboard() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-lg">Current Reconciliation Status</h3>
-                    <p className="text-sm text-muted-foreground">Run ID: {currentData.run_id}</p>
+                    <h3 className="font-semibold text-lg">
+                      Current Reconciliation Status
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      Run ID: {currentData.run_id}
+                    </p>
                     <div className="flex items-center gap-1 text-sm text-muted-foreground">
                       <span>Status:</span>
-                      {currentData.status === 'completed' ? (
+                      {currentData.status === "completed" ? (
                         <span className="flex items-center gap-1 text-green-600">
                           <CheckCircle2 className="h-4 w-4" />
                           Completed
@@ -345,8 +486,12 @@ export default function Dashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="text-3xl font-bold text-green-600">{matchedCount}</div>
-                    <div className="text-sm text-muted-foreground">Transactions Matched</div>
+                    <div className="text-3xl font-bold text-green-600">
+                      {matchedCount}
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                      Transactions Matched
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -359,14 +504,18 @@ export default function Dashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Analytics Overview</CardTitle>
-                  <p className="text-sm text-muted-foreground">Multiple chart views of reconciliation data</p>
+                  <p className="text-sm text-muted-foreground">
+                    Multiple chart views of reconciliation data
+                  </p>
                 </div>
                 <Select defaultValue="transaction">
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="transaction">Transaction Analysis</SelectItem>
+                    <SelectItem value="transaction">
+                      Transaction Analysis
+                    </SelectItem>
                     <SelectItem value="monthly">Monthly Trend</SelectItem>
                     <SelectItem value="comparison">Comparison View</SelectItem>
                   </SelectContent>
@@ -380,25 +529,52 @@ export default function Dashboard() {
                     {/* Pie Chart */}
                     <CarouselItem className="pl-2 md:pl-4 md:basis-full">
                       <div className="p-4">
-                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">Transaction Distribution</h3>
+                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">
+                          Transaction Distribution
+                        </h3>
                         <ResponsiveContainer width="100%" height={280}>
                           <PieChart>
                             <Pie
-                              data={pieData.length > 0 ? pieData : [{ name: "No Data", value: 1, color: "#ccc" }]}
+                              data={
+                                pieData.length > 0
+                                  ? pieData
+                                  : [
+                                      {
+                                        name: "No Data",
+                                        value: 1,
+                                        color: "#ccc",
+                                      },
+                                    ]
+                              }
                               cx="50%"
                               cy="50%"
                               innerRadius={50}
                               outerRadius={85}
                               paddingAngle={2}
                               dataKey="value"
-                              label={pieData.length > 0 ? ({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%` : undefined}
+                              label={
+                                pieData.length > 0
+                                  ? ({ name, percent }) =>
+                                      `${name} ${(percent * 100).toFixed(0)}%`
+                                  : undefined
+                              }
                             >
-                              {(pieData.length > 0 ? pieData : [{ name: "No Data", value: 1, color: "#ccc" }]).map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              {(pieData.length > 0
+                                ? pieData
+                                : [{ name: "No Data", value: 1, color: "#ccc" }]
+                              ).map((entry, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={entry.color}
+                                />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value) => value.toLocaleString()} />
-                            {pieData.length > 0 && <Legend verticalAlign="bottom" height={20} />}
+                            <Tooltip
+                              formatter={(value) => value.toLocaleString()}
+                            />
+                            {pieData.length > 0 && (
+                              <Legend verticalAlign="bottom" height={20} />
+                            )}
                           </PieChart>
                         </ResponsiveContainer>
                       </div>
@@ -407,17 +583,35 @@ export default function Dashboard() {
                     {/* Bar Chart */}
                     <CarouselItem className="pl-2 md:pl-4 md:basis-full">
                       <div className="p-4">
-                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">Monthly Comparison</h3>
+                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">
+                          Monthly Comparison
+                        </h3>
                         <ResponsiveContainer width="100%" height={280}>
-                          <BarChart data={currentHistorical && currentHistorical.length > 0 ? currentHistorical : []}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                          <BarChart
+                            data={
+                              currentHistorical && currentHistorical.length > 0
+                                ? currentHistorical
+                                : []
+                            }
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="hsl(var(--border))"
+                              opacity={0.3}
+                            />
                             <XAxis
                               dataKey="month"
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <YAxis
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <Tooltip
@@ -426,12 +620,27 @@ export default function Dashboard() {
                                 backgroundColor: "hsl(var(--background))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "8px",
-                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                               }}
                             />
-                            <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
-                            <Bar dataKey="allTxns" fill={CHART_COLORS.allTxns} name="All Txns" radius={[6, 6, 0, 0]} />
-                            <Bar dataKey="reconciled" fill={CHART_COLORS.reconciled} name="Reconciled" radius={[6, 6, 0, 0]} />
+                            <Legend
+                              wrapperStyle={{
+                                fontSize: "12px",
+                                paddingTop: "10px",
+                              }}
+                            />
+                            <Bar
+                              dataKey="allTxns"
+                              fill={CHART_COLORS.allTxns}
+                              name="All Txns"
+                              radius={[6, 6, 0, 0]}
+                            />
+                            <Bar
+                              dataKey="reconciled"
+                              fill={CHART_COLORS.reconciled}
+                              name="Reconciled"
+                              radius={[6, 6, 0, 0]}
+                            />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -440,17 +649,35 @@ export default function Dashboard() {
                     {/* Line Chart (Trend) */}
                     <CarouselItem className="pl-2 md:pl-4 md:basis-full">
                       <div className="p-4">
-                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">Reconciliation Trend</h3>
+                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">
+                          Reconciliation Trend
+                        </h3>
                         <ResponsiveContainer width="100%" height={280}>
-                          <LineChart data={currentHistorical && currentHistorical.length > 0 ? currentHistorical : []}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                          <LineChart
+                            data={
+                              currentHistorical && currentHistorical.length > 0
+                                ? currentHistorical
+                                : []
+                            }
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="hsl(var(--border))"
+                              opacity={0.3}
+                            />
                             <XAxis
                               dataKey="month"
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <YAxis
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <Tooltip
@@ -459,10 +686,15 @@ export default function Dashboard() {
                                 backgroundColor: "hsl(var(--background))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "8px",
-                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                               }}
                             />
-                            <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+                            <Legend
+                              wrapperStyle={{
+                                fontSize: "12px",
+                                paddingTop: "10px",
+                              }}
+                            />
                             <Line
                               type="monotone"
                               dataKey="allTxns"
@@ -489,21 +721,44 @@ export default function Dashboard() {
                     {/* Success Rate Chart */}
                     <CarouselItem className="pl-2 md:pl-4 md:basis-full">
                       <div className="p-4">
-                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">Success Rate Trend</h3>
+                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">
+                          Success Rate Trend
+                        </h3>
                         <ResponsiveContainer width="100%" height={280}>
-                          <BarChart data={currentHistorical && currentHistorical.length > 0 ? currentHistorical.map(d => ({
-                            ...d,
-                            successRate: d.allTxns > 0 ? Math.round((d.reconciled / d.allTxns) * 100) : 0
-                          })) : []}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                          <BarChart
+                            data={
+                              currentHistorical && currentHistorical.length > 0
+                                ? currentHistorical.map((d) => ({
+                                    ...d,
+                                    successRate:
+                                      d.allTxns > 0
+                                        ? Math.round(
+                                            (d.reconciled / d.allTxns) * 100,
+                                          )
+                                        : 0,
+                                  }))
+                                : []
+                            }
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="hsl(var(--border))"
+                              opacity={0.3}
+                            />
                             <XAxis
                               dataKey="month"
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <YAxis
                               domain={[0, 100]}
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <Tooltip
@@ -512,10 +767,15 @@ export default function Dashboard() {
                                 backgroundColor: "hsl(var(--background))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "8px",
-                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                               }}
                             />
-                            <Bar dataKey="successRate" fill={CHART_COLORS.reconciled} name="Success Rate %" radius={[6, 6, 0, 0]} />
+                            <Bar
+                              dataKey="successRate"
+                              fill={CHART_COLORS.reconciled}
+                              name="Success Rate %"
+                              radius={[6, 6, 0, 0]}
+                            />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
@@ -524,38 +784,59 @@ export default function Dashboard() {
                     {/* Scatter Diagram */}
                     <CarouselItem className="pl-2 md:pl-4 md:basis-full">
                       <div className="p-4">
-                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">Transaction Scatter Analysis</h3>
+                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">
+                          Transaction Scatter Analysis
+                        </h3>
                         <ResponsiveContainer width="100%" height={280}>
-                          <ScatterChart data={currentHistorical && currentHistorical.length > 0 ? currentHistorical.map((d, index) => ({
-                            x: index + 1,
-                            y: d.allTxns,
-                            z: d.reconciled,
-                            month: d.month
-                          })) : []}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                          <ScatterChart
+                            data={
+                              currentHistorical && currentHistorical.length > 0
+                                ? currentHistorical.map((d, index) => ({
+                                    x: index + 1,
+                                    y: d.allTxns,
+                                    z: d.reconciled,
+                                    month: d.month,
+                                  }))
+                                : []
+                            }
+                          >
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="hsl(var(--border))"
+                              opacity={0.3}
+                            />
                             <XAxis
                               type="number"
                               dataKey="x"
                               name="Month"
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <YAxis
                               type="number"
                               dataKey="y"
                               name="All Transactions"
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <Tooltip
-                              cursor={{ strokeDasharray: '3 3' }}
+                              cursor={{ strokeDasharray: "3 3" }}
                               contentStyle={{
                                 backgroundColor: "hsl(var(--background))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "8px",
-                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                               }}
-                              formatter={(value, name) => [value.toLocaleString(), name]}
+                              formatter={(value, name) => [
+                                value.toLocaleString(),
+                                name,
+                              ]}
                               labelFormatter={(label) => `Month ${label}`}
                             />
                             <Scatter
@@ -571,41 +852,99 @@ export default function Dashboard() {
                     {/* Stock-like Line Chart (Area Chart) */}
                     <CarouselItem className="pl-2 md:pl-4 md:basis-full">
                       <div className="p-4">
-                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">Reconciliation Performance</h3>
+                        <h3 className="text-center font-semibold mb-2 text-foreground text-sm">
+                          Reconciliation Performance
+                        </h3>
                         <ResponsiveContainer width="100%" height={280}>
-                          <AreaChart data={currentHistorical && currentHistorical.length > 0 ? currentHistorical.map(d => ({
-                            ...d,
-                            successRate: d.allTxns > 0 ? Math.round((d.reconciled / d.allTxns) * 100) : 0,
-                            unmatchedRate: d.allTxns > 0 ? Math.round((d.allTxns - d.reconciled) / d.allTxns * 100) : 0
-                          })) : []}>
+                          <AreaChart
+                            data={
+                              currentHistorical && currentHistorical.length > 0
+                                ? currentHistorical.map((d) => ({
+                                    ...d,
+                                    successRate:
+                                      d.allTxns > 0
+                                        ? Math.round(
+                                            (d.reconciled / d.allTxns) * 100,
+                                          )
+                                        : 0,
+                                    unmatchedRate:
+                                      d.allTxns > 0
+                                        ? Math.round(
+                                            ((d.allTxns - d.reconciled) /
+                                              d.allTxns) *
+                                              100,
+                                          )
+                                        : 0,
+                                  }))
+                                : []
+                            }
+                          >
                             <defs>
-                              <linearGradient id="colorSuccess" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={CHART_COLORS.reconciled} stopOpacity={0.8} />
-                                <stop offset="95%" stopColor={CHART_COLORS.reconciled} stopOpacity={0.1} />
+                              <linearGradient
+                                id="colorSuccess"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                              >
+                                <stop
+                                  offset="5%"
+                                  stopColor={CHART_COLORS.reconciled}
+                                  stopOpacity={0.8}
+                                />
+                                <stop
+                                  offset="95%"
+                                  stopColor={CHART_COLORS.reconciled}
+                                  stopOpacity={0.1}
+                                />
                               </linearGradient>
-                              <linearGradient id="colorUnmatched" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor={CHART_COLORS.unmatched} stopOpacity={0.8} />
-                                <stop offset="95%" stopColor={CHART_COLORS.unmatched} stopOpacity={0.1} />
+                              <linearGradient
+                                id="colorUnmatched"
+                                x1="0"
+                                y1="0"
+                                x2="0"
+                                y2="1"
+                              >
+                                <stop
+                                  offset="5%"
+                                  stopColor={CHART_COLORS.unmatched}
+                                  stopOpacity={0.8}
+                                />
+                                <stop
+                                  offset="95%"
+                                  stopColor={CHART_COLORS.unmatched}
+                                  stopOpacity={0.1}
+                                />
                               </linearGradient>
                             </defs>
                             <XAxis
                               dataKey="month"
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
                             <YAxis
                               domain={[0, 100]}
-                              tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                              tick={{
+                                fontSize: 12,
+                                fill: "hsl(var(--muted-foreground))",
+                              }}
                               stroke="hsl(var(--border))"
                             />
-                            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                            <CartesianGrid
+                              strokeDasharray="3 3"
+                              stroke="hsl(var(--border))"
+                              opacity={0.3}
+                            />
                             <Tooltip
                               formatter={(value) => `${value}%`}
                               contentStyle={{
                                 backgroundColor: "hsl(var(--background))",
                                 border: "1px solid hsl(var(--border))",
                                 borderRadius: "8px",
-                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                                boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                               }}
                             />
                             <Area
@@ -643,72 +982,19 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Dispute Overview Card */}
-          {disputeStats.total > 0 && (
-            <Card className="shadow-lg">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Dispute Management Overview</CardTitle>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.location.href = '/disputes'}
-                  >
-                    View All Disputes
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center p-3 bg-muted/50 rounded-lg">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <Scale className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-xs font-medium text-muted-foreground">Total</span>
-                    </div>
-                    <div className="text-xl font-bold">{disputeStats.total}</div>
-                  </div>
-                  <div className="text-center p-3 bg-orange-50 rounded-lg">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <AlertCircle className="w-4 h-4 text-orange-600" />
-                      <span className="text-xs font-medium text-orange-700">Open</span>
-                    </div>
-                    <div className="text-xl font-bold text-orange-600">{disputeStats.open}</div>
-                  </div>
-                  <div className="text-center p-3 bg-blue-50 rounded-lg">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <Activity className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs font-medium text-blue-700">Working</span>
-                    </div>
-                    <div className="text-xl font-bold text-blue-600">{disputeStats.working}</div>
-                  </div>
-                  <div className="text-center p-3 bg-green-50 rounded-lg">
-                    <div className="flex items-center justify-center gap-2 mb-2">
-                      <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      <span className="text-xs font-medium text-green-700">Closed</span>
-                    </div>
-                    <div className="text-xl font-bold text-green-600">{disputeStats.closed}</div>
-                  </div>
-                </div>
-
-                {disputeStats.tatBreached > 0 && (
-                  <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-600" />
-                      <span className="text-sm font-medium text-red-700">
-                        {disputeStats.tatBreached} dispute{disputeStats.tatBreached > 1 ? 's' : ''} with TAT breach
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )}
+          {/* Quick links: open Disputes / User Management tabs */}
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => setActiveTab("disputes")}>Open Disputes</Button>
+            <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>Open User Management</Button>
+          </div>
 
           {/* KPI Cards - Reconciliation Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="bg-gradient-to-br from-blue-50 to-card shadow-lg border border-blue-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-blue-700">Total Transactions</CardTitle>
+                <CardTitle className="text-sm font-medium text-blue-700">
+                  Total Transactions
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -716,7 +1002,9 @@ export default function Dashboard() {
                     <div className="text-3xl font-bold text-blue-800">
                       {totalCount.toLocaleString()}
                     </div>
-                    <div className="text-sm text-blue-600 mt-1">Processed Today</div>
+                    <div className="text-sm text-blue-600 mt-1">
+                      Processed Today
+                    </div>
                   </div>
                   <BarChart3 className="h-10 w-10 text-blue-600 opacity-30" />
                 </div>
@@ -725,7 +1013,9 @@ export default function Dashboard() {
 
             <Card className="bg-gradient-to-br from-green-50 to-card shadow-lg border border-green-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-green-700">Successfully Matched</CardTitle>
+                <CardTitle className="text-sm font-medium text-green-700">
+                  Successfully Matched
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -734,7 +1024,10 @@ export default function Dashboard() {
                       {matchedCount.toLocaleString()}
                     </div>
                     <div className="text-sm text-green-600 mt-1">
-                      {totalCount > 0 ? ((matchedCount / totalCount) * 100).toFixed(1) : 0}% Success Rate
+                      {totalCount > 0
+                        ? ((matchedCount / totalCount) * 100).toFixed(1)
+                        : 0}
+                      % Success Rate
                     </div>
                   </div>
                   <CheckCircle2 className="h-10 w-10 text-green-600 opacity-30" />
@@ -744,7 +1037,9 @@ export default function Dashboard() {
 
             <Card className="bg-gradient-to-br from-orange-50 to-card shadow-lg border border-orange-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-orange-700">Breaks to Resolve</CardTitle>
+                <CardTitle className="text-sm font-medium text-orange-700">
+                  Breaks to Resolve
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -752,7 +1047,9 @@ export default function Dashboard() {
                     <div className="text-3xl font-bold text-orange-800">
                       {unmatchedCount.toLocaleString()}
                     </div>
-                    <div className="text-sm text-orange-600 mt-1">Require Attention</div>
+                    <div className="text-sm text-orange-600 mt-1">
+                      Require Attention
+                    </div>
                   </div>
                   <AlertCircle className="h-10 w-10 text-orange-600 opacity-30" />
                 </div>
@@ -761,7 +1058,9 @@ export default function Dashboard() {
 
             <Card className="bg-gradient-to-br from-red-50 to-card shadow-lg border border-red-200">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-red-700">Hanging Transactions</CardTitle>
+                <CardTitle className="text-sm font-medium text-red-700">
+                  Hanging Transactions
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
@@ -769,7 +1068,9 @@ export default function Dashboard() {
                     <div className="text-3xl font-bold text-red-800">
                       {hangingCount.toLocaleString()}
                     </div>
-                    <div className="text-sm text-red-600 mt-1">Pending Resolution</div>
+                    <div className="text-sm text-red-600 mt-1">
+                      Pending Resolution
+                    </div>
                   </div>
                   <Activity className="h-10 w-10 text-red-600 opacity-30" />
                 </div>
@@ -784,27 +1085,39 @@ export default function Dashboard() {
                 <Activity className="w-5 h-5 text-blue-600" />
                 Transaction Flow Analysis
               </CardTitle>
-              <p className="text-sm text-muted-foreground">Real-time inward and outward transaction metrics</p>
+              <p className="text-sm text-muted-foreground">
+                Real-time inward and outward transaction metrics
+              </p>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {/* Inflow */}
                 <div className="bg-gradient-to-br from-green-50 to-green-100/50 p-6 rounded-lg border border-green-200">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-green-800">Inward (Credit)</h4>
+                    <h4 className="text-lg font-semibold text-green-800">
+                      Inward (Credit)
+                    </h4>
                     <TrendingUp className="w-6 h-6 text-green-600" />
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-green-700">Transaction Count:</span>
+                      <span className="text-sm text-green-700">
+                        Transaction Count:
+                      </span>
                       <span className="font-bold text-green-800 text-lg">
-                        {inwardCount > 0 ? inwardCount.toLocaleString() : '0'}
+                        {inwardCount > 0 ? inwardCount.toLocaleString() : "0"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-green-700">Total Amount:</span>
+                      <span className="text-sm text-green-700">
+                        Total Amount:
+                      </span>
                       <span className="font-bold text-green-800 text-lg">
-                        ₹{inwardAmount > 0 ? (inwardAmount / 10000000).toFixed(2) : '0.00'}Cr
+                        ₹
+                        {inwardAmount > 0
+                          ? (inwardAmount / 10000000).toFixed(2)
+                          : "0.00"}
+                        Cr
                       </span>
                     </div>
                   </div>
@@ -813,20 +1126,30 @@ export default function Dashboard() {
                 {/* Outflow */}
                 <div className="bg-gradient-to-br from-red-50 to-red-100/50 p-6 rounded-lg border border-red-200">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-red-800">Outward (Debit)</h4>
+                    <h4 className="text-lg font-semibold text-red-800">
+                      Outward (Debit)
+                    </h4>
                     <Activity className="w-6 h-6 text-red-600" />
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-red-700">Transaction Count:</span>
+                      <span className="text-sm text-red-700">
+                        Transaction Count:
+                      </span>
                       <span className="font-bold text-red-800 text-lg">
-                        {outwardCount > 0 ? outwardCount.toLocaleString() : '0'}
+                        {outwardCount > 0 ? outwardCount.toLocaleString() : "0"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-red-700">Total Amount:</span>
+                      <span className="text-sm text-red-700">
+                        Total Amount:
+                      </span>
                       <span className="font-bold text-red-800 text-lg">
-                        ₹{outwardAmount > 0 ? (outwardAmount / 10000000).toFixed(2) : '0.00'}Cr
+                        ₹
+                        {outwardAmount > 0
+                          ? (outwardAmount / 10000000).toFixed(2)
+                          : "0.00"}
+                        Cr
                       </span>
                     </div>
                   </div>
@@ -835,32 +1158,44 @@ export default function Dashboard() {
                 {/* Net Flow */}
                 <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-lg font-semibold text-blue-800">Net Flow</h4>
+                    <h4 className="text-lg font-semibold text-blue-800">
+                      Net Flow
+                    </h4>
                     <Scale className="w-6 h-6 text-blue-600" />
                   </div>
                   <div className="space-y-3">
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-blue-700">Net Count:</span>
-                      <span className={`font-bold text-lg ${(inwardCount - outwardCount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {(inwardCount - outwardCount) >= 0 ? '+' : ''}{(inwardCount - outwardCount).toLocaleString()}
+                      <span
+                        className={`font-bold text-lg ${inwardCount - outwardCount >= 0 ? "text-green-600" : "text-red-600"}`}
+                      >
+                        {inwardCount - outwardCount >= 0 ? "+" : ""}
+                        {(inwardCount - outwardCount).toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-blue-700">Net Amount:</span>
-                      <span className={`font-bold text-lg ${(inwardAmount - outwardAmount) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {(inwardAmount - outwardAmount) >= 0 ? '+' : ''}₹{((inwardAmount - outwardAmount) / 10000000).toFixed(2)}Cr
+                      <span
+                        className={`font-bold text-lg ${inwardAmount - outwardAmount >= 0 ? "text-green-600" : "text-red-600"}`}
+                      >
+                        {inwardAmount - outwardAmount >= 0 ? "+" : ""}₹
+                        {((inwardAmount - outwardAmount) / 10000000).toFixed(2)}
+                        Cr
                       </span>
                     </div>
                   </div>
                 </div>
               </div>
-              
+
               {/* Show message if no data */}
               {inwardCount === 0 && outwardCount === 0 && !isDemoMode && (
                 <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <div className="flex items-center gap-2 text-yellow-800">
                     <AlertCircle className="w-4 h-4" />
-                    <span className="text-sm">No inward/outward transaction data available. This data may not be included in the current reconciliation run.</span>
+                    <span className="text-sm">
+                      No inward/outward transaction data available. This data
+                      may not be included in the current reconciliation run.
+                    </span>
                   </div>
                 </div>
               )}
@@ -868,24 +1203,41 @@ export default function Dashboard() {
 
             {/* Trend Comparison Chart */}
             <div className="border-t pt-6">
-              <h4 className="text-sm font-semibold mb-4">Inward vs Outward Trend Comparison</h4>
+              <h4 className="text-sm font-semibold mb-4">
+                Inward vs Outward Trend Comparison
+              </h4>
               {currentHistorical && currentHistorical.length > 0 ? (
                 <ResponsiveContainer width="100%" height={250}>
                   <LineChart data={currentHistorical}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      opacity={0.3}
+                    />
                     <XAxis
                       dataKey="month"
-                      tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                      tick={{
+                        fontSize: 12,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
                       stroke="hsl(var(--border))"
                     />
                     <YAxis
-                      tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                      tick={{
+                        fontSize: 12,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
                       stroke="hsl(var(--border))"
                     />
                     <Tooltip
                       formatter={(value, name) => {
-                        if (name === 'inward' || name === 'outward') {
-                          return [value?.toLocaleString() || 0, name === 'inward' ? 'Inward (Credit)' : 'Outward (Debit)'];
+                        if (name === "inward" || name === "outward") {
+                          return [
+                            value?.toLocaleString() || 0,
+                            name === "inward"
+                              ? "Inward (Credit)"
+                              : "Outward (Debit)",
+                          ];
                         }
                         return [value?.toLocaleString() || 0, name];
                       }}
@@ -893,10 +1245,12 @@ export default function Dashboard() {
                         backgroundColor: "hsl(var(--background))",
                         border: "1px solid hsl(var(--border))",
                         borderRadius: "8px",
-                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+                    <Legend
+                      wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
+                    />
                     <Line
                       type="monotone"
                       dataKey="inward"
@@ -921,16 +1275,18 @@ export default function Dashboard() {
                 <div className="flex items-center justify-center h-[250px] text-muted-foreground">
                   <div className="text-center">
                     <BarChart3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm">No data available for selected filters</p>
-                    <p className="text-xs mt-1">Run reconciliation to see trend data</p>
+                    <p className="text-sm">
+                      No data available for selected filters
+                    </p>
+                    <p className="text-xs mt-1">
+                      Run reconciliation to see trend data
+                    </p>
                   </div>
                 </div>
               )}
             </div>
           </Card>
-
-
-                 </TabsContent>
+        </TabsContent>
 
         {/* Today's Breaks Tab */}
         <TabsContent value="breaks" className="space-y-6 mt-6">
@@ -938,9 +1294,12 @@ export default function Dashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-lg">Today's Reconciliation Breaks</h3>
+                  <h3 className="font-semibold text-lg">
+                    Today's Reconciliation Breaks
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    Transactions from today's reconciliation that require attention
+                    Transactions from today's reconciliation that require
+                    attention
                   </p>
                 </div>
                 <div className="text-right">
@@ -961,7 +1320,9 @@ export default function Dashboard() {
               <div className="grid grid-cols-4 gap-4">
                 <Card className="shadow-lg">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Total Breaks</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Total Breaks
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between">
@@ -969,7 +1330,9 @@ export default function Dashboard() {
                         <p className="text-2xl font-bold text-yellow-600">
                           {unmatchedCount}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">Requiring action</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Requiring action
+                        </p>
                       </div>
                       <AlertCircle className="h-8 w-8 text-yellow-600 opacity-20" />
                     </div>
@@ -978,7 +1341,9 @@ export default function Dashboard() {
 
                 <Card className="shadow-lg bg-gradient-to-br from-orange-50 to-card">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Partial Matches</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Partial Matches
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between">
@@ -986,7 +1351,9 @@ export default function Dashboard() {
                         <p className="text-2xl font-bold text-orange-600">
                           {Math.floor(unmatchedCount * 0.6)}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">Can be force matched</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Can be force matched
+                        </p>
                       </div>
                       <Activity className="h-8 w-8 text-orange-600 opacity-20" />
                     </div>
@@ -995,7 +1362,9 @@ export default function Dashboard() {
 
                 <Card className="shadow-lg bg-gradient-to-br from-red-50 to-card">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Hanging Transactions</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Hanging Transactions
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between">
@@ -1003,7 +1372,12 @@ export default function Dashboard() {
                         <p className="text-2xl font-bold text-red-600">
                           {hangingCount}
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">{totalCount > 0 ? ((hangingCount / totalCount) * 100).toFixed(1) : 0}% of total</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {totalCount > 0
+                            ? ((hangingCount / totalCount) * 100).toFixed(1)
+                            : 0}
+                          % of total
+                        </p>
                       </div>
                       <AlertCircle className="h-8 w-8 text-red-600 opacity-20" />
                     </div>
@@ -1012,15 +1386,22 @@ export default function Dashboard() {
 
                 <Card className="shadow-lg bg-gradient-to-br from-blue-50 to-card">
                   <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium text-muted-foreground">Success Rate</CardTitle>
+                    <CardTitle className="text-sm font-medium text-muted-foreground">
+                      Success Rate
+                    </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-2xl font-bold text-blue-600">
-                          {totalCount > 0 ? Math.round((matchedCount / totalCount) * 100) : 0}%
+                          {totalCount > 0
+                            ? Math.round((matchedCount / totalCount) * 100)
+                            : 0}
+                          %
                         </p>
-                        <p className="text-xs text-muted-foreground mt-1">Reconciliation rate</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Reconciliation rate
+                        </p>
                       </div>
                       <TrendingUp className="h-8 w-8 text-blue-600 opacity-20" />
                     </div>
@@ -1032,7 +1413,9 @@ export default function Dashboard() {
               <Card className="shadow-lg">
                 <CardHeader>
                   <CardTitle>Break Distribution</CardTitle>
-                  <p className="text-sm text-muted-foreground">Today's breakup by category</p>
+                  <p className="text-sm text-muted-foreground">
+                    Today's breakup by category
+                  </p>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col lg:flex-row items-center gap-6">
@@ -1041,9 +1424,21 @@ export default function Dashboard() {
                         <PieChart>
                           <Pie
                             data={[
-                              { name: "Partial Matches", value: partialMatchesCount, color: CHART_COLORS.purple },
-                              { name: "Hanging Transactions", value: hangingCount, color: CHART_COLORS.unmatched },
-                              { name: "True Unmatched", value: unmatchedCount, color: CHART_COLORS.amber }
+                              {
+                                name: "Partial Matches",
+                                value: partialMatchesCount,
+                                color: CHART_COLORS.purple,
+                              },
+                              {
+                                name: "Hanging Transactions",
+                                value: hangingCount,
+                                color: CHART_COLORS.unmatched,
+                              },
+                              {
+                                name: "True Unmatched",
+                                value: unmatchedCount,
+                                color: CHART_COLORS.amber,
+                              },
                             ]}
                             cx="50%"
                             cy="50%"
@@ -1057,12 +1452,15 @@ export default function Dashboard() {
                             <Cell fill={CHART_COLORS.amber} />
                           </Pie>
                           <Tooltip
-                            formatter={(value) => [value.toLocaleString(), 'Count']}
+                            formatter={(value) => [
+                              value.toLocaleString(),
+                              "Count",
+                            ]}
                             contentStyle={{
                               backgroundColor: "hsl(var(--background))",
                               border: "1px solid hsl(var(--border))",
                               borderRadius: "8px",
-                              boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                              boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                             }}
                           />
                         </PieChart>
@@ -1073,42 +1471,79 @@ export default function Dashboard() {
                         <p className="text-3xl font-bold text-foreground">
                           {partialMatchesCount + hangingCount + unmatchedCount}
                         </p>
-                        <p className="text-sm text-muted-foreground">Total Breaks</p>
+                        <p className="text-sm text-muted-foreground">
+                          Total Breaks
+                        </p>
                       </div>
                       <div className="space-y-3">
                         <div className="flex items-center justify-between p-3 rounded-lg bg-purple-50 border border-purple-200">
                           <div className="flex items-center gap-3">
                             <div className="w-4 h-4 rounded-full bg-purple-500"></div>
-                            <span className="text-sm font-medium">Partial Matches</span>
+                            <span className="text-sm font-medium">
+                              Partial Matches
+                            </span>
                           </div>
                           <div className="text-right">
-                            <p className="font-semibold">{partialMatchesCount}</p>
+                            <p className="font-semibold">
+                              {partialMatchesCount}
+                            </p>
                             <p className="text-xs text-muted-foreground">
-                              {totalCount > 0 ? ((partialMatchesCount / (partialMatchesCount + hangingCount + unmatchedCount)) * 100).toFixed(1) : 0}%
+                              {totalCount > 0
+                                ? (
+                                    (partialMatchesCount /
+                                      (partialMatchesCount +
+                                        hangingCount +
+                                        unmatchedCount)) *
+                                    100
+                                  ).toFixed(1)
+                                : 0}
+                              %
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200">
                           <div className="flex items-center gap-3">
                             <div className="w-4 h-4 rounded-full bg-red-500"></div>
-                            <span className="text-sm font-medium">Hanging Transactions</span>
+                            <span className="text-sm font-medium">
+                              Hanging Transactions
+                            </span>
                           </div>
                           <div className="text-right">
                             <p className="font-semibold">{hangingCount}</p>
                             <p className="text-xs text-muted-foreground">
-                              {totalCount > 0 ? ((hangingCount / (partialMatchesCount + hangingCount + unmatchedCount)) * 100).toFixed(1) : 0}%
+                              {totalCount > 0
+                                ? (
+                                    (hangingCount /
+                                      (partialMatchesCount +
+                                        hangingCount +
+                                        unmatchedCount)) *
+                                    100
+                                  ).toFixed(1)
+                                : 0}
+                              %
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-200">
                           <div className="flex items-center gap-3">
                             <div className="w-4 h-4 rounded-full bg-amber-500"></div>
-                            <span className="text-sm font-medium">True Unmatched</span>
+                            <span className="text-sm font-medium">
+                              True Unmatched
+                            </span>
                           </div>
                           <div className="text-right">
                             <p className="font-semibold">{unmatchedCount}</p>
                             <p className="text-xs text-muted-foreground">
-                              {totalCount > 0 ? ((unmatchedCount / (partialMatchesCount + hangingCount + unmatchedCount)) * 100).toFixed(1) : 0}%
+                              {totalCount > 0
+                                ? (
+                                    (unmatchedCount /
+                                      (partialMatchesCount +
+                                        hangingCount +
+                                        unmatchedCount)) *
+                                    100
+                                  ).toFixed(1)
+                                : 0}
+                              %
                             </p>
                           </div>
                         </div>
@@ -1126,14 +1561,14 @@ export default function Dashboard() {
                 <CardContent className="space-y-3">
                   <Button
                     className="w-full rounded-full bg-brand-blue hover:bg-brand-mid"
-                    onClick={() => window.location.href = '/unmatched'}
+                    onClick={() => (window.location.href = "/unmatched")}
                   >
                     View Unmatched Transactions
                   </Button>
                   <Button
                     variant="outline"
                     className="w-full rounded-full"
-                    onClick={() => window.location.href = '/force-match'}
+                    onClick={() => (window.location.href = "/force-match")}
                   >
                     Use Force Matching Tool
                   </Button>
@@ -1145,9 +1580,12 @@ export default function Dashboard() {
               <CardContent className="pt-6">
                 <div className="text-center py-8">
                   <CheckCircle2 className="w-16 h-16 mx-auto text-green-500 mb-4" />
-                  <p className="text-lg font-semibold text-green-600">Perfect Reconciliation!</p>
+                  <p className="text-lg font-semibold text-green-600">
+                    Perfect Reconciliation!
+                  </p>
                   <p className="text-muted-foreground mt-2">
-                    All transactions have been successfully reconciled with zero breaks.
+                    All transactions have been successfully reconciled with zero
+                    breaks.
                   </p>
                 </div>
               </CardContent>
@@ -1155,13 +1593,15 @@ export default function Dashboard() {
           )}
         </TabsContent>
 
-        {/* Date-wise Details Tab */}
+               {/* Date-wise Details Tab */}
         <TabsContent value="datewise" className="space-y-6 mt-6">
           <Card className="shadow-lg bg-gradient-to-r from-indigo-50 to-card border-indigo-200">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-lg">Date-wise Reconciliation Details</h3>
+                  <h3 className="font-semibold text-lg">
+                    Date-wise Reconciliation Details
+                  </h3>
                   <p className="text-sm text-muted-foreground">
                     Detailed breakdown of reconciliation activities by date
                   </p>
@@ -1182,36 +1622,69 @@ export default function Dashboard() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle>Reconciliation Summary by Date</CardTitle>
-              <p className="text-sm text-muted-foreground">Historical reconciliation performance across dates</p>
+              <p className="text-sm text-muted-foreground">
+                Historical reconciliation performance across dates
+              </p>
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="text-left p-3 font-medium text-muted-foreground">Date</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">Total Txns</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">Matched</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">Unmatched</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">Success Rate</th>
-                      <th className="text-right p-3 font-medium text-muted-foreground">Amount</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">
+                        Date
+                      </th>
+                      <th className="text-right p-3 font-medium text-muted-foreground">
+                        Total Txns
+                      </th>
+                      <th className="text-right p-3 font-medium text-muted-foreground">
+                        Matched
+                      </th>
+                      <th className="text-right p-3 font-medium text-muted-foreground">
+                        Unmatched
+                      </th>
+                      <th className="text-right p-3 font-medium text-muted-foreground">
+                        Success Rate
+                      </th>
+                      <th className="text-right p-3 font-medium text-muted-foreground">
+                        Amount
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentHistorical && currentHistorical.length > 0 ? (
                       currentHistorical.map((item, index) => {
-                        const successRate = item.allTxns > 0 ? Math.round((item.reconciled / item.allTxns) * 100) : 0;
+                        const successRate =
+                          item.allTxns > 0
+                            ? Math.round((item.reconciled / item.allTxns) * 100)
+                            : 0;
                         return (
-                          <tr key={index} className="border-b border-border hover:bg-muted/50">
+                          <tr
+                            key={index}
+                            className="border-b border-border hover:bg-muted/50"
+                          >
                             <td className="p-3 font-medium">{item.month}</td>
-                            <td className="p-3 text-right">{item.allTxns.toLocaleString()}</td>
-                            <td className="p-3 text-right text-green-600">{item.reconciled.toLocaleString()}</td>
-                            <td className="p-3 text-right text-red-600">{(item.allTxns - item.reconciled).toLocaleString()}</td>
                             <td className="p-3 text-right">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${successRate >= 90 ? 'bg-green-100 text-green-800' :
-                                successRate >= 70 ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-red-100 text-red-800'
-                                }`}>
+                              {item.allTxns.toLocaleString()}
+                            </td>
+                            <td className="p-3 text-right text-green-600">
+                              {item.reconciled.toLocaleString()}
+                            </td>
+                            <td className="p-3 text-right text-red-600">
+                              {(
+                                item.allTxns - item.reconciled
+                              ).toLocaleString()}
+                            </td>
+                            <td className="p-3 text-right">
+                              <span
+                                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                  successRate >= 90
+                                    ? "bg-green-100 text-green-800"
+                                    : successRate >= 70
+                                      ? "bg-yellow-100 text-yellow-800"
+                                      : "bg-red-100 text-red-800"
+                                }`}
+                              >
                                 {successRate}%
                               </span>
                             </td>
@@ -1223,7 +1696,10 @@ export default function Dashboard() {
                       })
                     ) : (
                       <tr>
-                        <td colSpan={6} className="p-8 text-center text-muted-foreground">
+                        <td
+                          colSpan={6}
+                          className="p-8 text-center text-muted-foreground"
+                        >
                           No historical data available
                         </td>
                       </tr>
@@ -1238,24 +1714,45 @@ export default function Dashboard() {
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle>Date-wise Performance Trend</CardTitle>
-              <p className="text-sm text-muted-foreground">Visual representation of reconciliation performance over time</p>
+              <p className="text-sm text-muted-foreground">
+                Visual representation of reconciliation performance over time
+              </p>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={currentHistorical && currentHistorical.length > 0 ? currentHistorical.map(d => ({
-                  ...d,
-                  successRate: d.allTxns > 0 ? Math.round((d.reconciled / d.allTxns) * 100) : 0,
-                  date: d.month
-                })) : []}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                <LineChart
+                  data={
+                    currentHistorical && currentHistorical.length > 0
+                      ? currentHistorical.map((d) => ({
+                          ...d,
+                          successRate:
+                            d.allTxns > 0
+                              ? Math.round((d.reconciled / d.allTxns) * 100)
+                              : 0,
+                          date: d.month,
+                        }))
+                      : []
+                  }
+                >
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="hsl(var(--border))"
+                    opacity={0.3}
+                  />
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                    tick={{
+                      fontSize: 12,
+                      fill: "hsl(var(--muted-foreground))",
+                    }}
                     stroke="hsl(var(--border))"
                   />
                   <YAxis
                     domain={[0, 100]}
-                    tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
+                    tick={{
+                      fontSize: 12,
+                      fill: "hsl(var(--muted-foreground))",
+                    }}
                     stroke="hsl(var(--border))"
                   />
                   <Tooltip
@@ -1264,10 +1761,12 @@ export default function Dashboard() {
                       backgroundColor: "hsl(var(--background))",
                       border: "1px solid hsl(var(--border))",
                       borderRadius: "8px",
-                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
+                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
                     }}
                   />
-                  <Legend wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }} />
+                  <Legend
+                    wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
+                  />
                   <Line
                     type="monotone"
                     dataKey="successRate"
@@ -1281,8 +1780,16 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+        </TabsContent>
 
+        {/* Disputes Tab (separate from Recon) */}
+        <TabsContent value="disputes" className="space-y-6 mt-6">
+          <Disputes dateFrom={embeddedDateFrom} dateTo={embeddedDateTo} />
+        </TabsContent>
 
+        {/* User Management Tab (separate from Recon) */}
+        <TabsContent value="users" className="space-y-6 mt-6">
+          <MakerChecker dateFrom={embeddedDateFrom} dateTo={embeddedDateTo} />
         </TabsContent>
       </Tabs>
     </div>

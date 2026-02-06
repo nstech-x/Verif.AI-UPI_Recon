@@ -14,7 +14,12 @@ import { Dispute, TxnSubtype, DisputeStatusGroup, getStageName } from "../types/
 import { getDisputeCategories, getReasonCodes } from "../constants/disputeMaster";
 import { useToast } from "../hooks/use-toast";
 
-export default function Disputes() {
+interface DisputesProps {
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export default function Disputes({ dateFrom, dateTo }: DisputesProps) {
   const { toast } = useToast();
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [filteredDisputes, setFilteredDisputes] = useState<Dispute[]>([]);
@@ -39,15 +44,16 @@ export default function Disputes() {
   useEffect(() => {
     // Load demo disputes
     const demoDisputes = generateDemoDisputes();
+    console.log('[Disputes] Demo disputes loaded:', demoDisputes.length, { dateFrom, dateTo });
     setDisputes(demoDisputes);
-    filterDisputes(demoDisputes, activeTab, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus);
+    filterDisputes(demoDisputes, activeTab, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus, dateFrom, dateTo);
   }, []);
 
   useEffect(() => {
-    filterDisputes(disputes, activeTab, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus);
-  }, [activeTab, disputes, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus]);
+    filterDisputes(disputes, activeTab, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus, dateFrom, dateTo);
+  }, [activeTab, disputes, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus, dateFrom, dateTo]);
 
-  const filterDisputes = (allDisputes: Dispute[], status: string, search: string, txnSubtype: string, category: string, tatStatus: string) => {
+  const filterDisputes = (allDisputes: Dispute[], status: string, search: string, txnSubtype: string, category: string, tatStatus: string, dateFrom?: string, dateTo?: string) => {
     let filtered = allDisputes.filter(d => {
       // Status filter
       switch (status) {
@@ -89,6 +95,27 @@ export default function Disputes() {
         if (tatStatus === "breached" && tatText !== "TAT Breached") return false;
         if (tatStatus === "approaching" && tatText !== "Approaching TAT") return false;
         if (tatStatus === "within" && tatText !== "Within TAT") return false;
+      }
+
+      // Date range filter (if provided) - use transactionDate when available
+      if (dateFrom || dateTo) {
+        try {
+          const txnDate = d.transactionDate ? new Date(d.transactionDate) : null;
+          if (txnDate) {
+            if (dateFrom) {
+              const from = new Date(dateFrom);
+              if (txnDate < from) return false;
+            }
+            if (dateTo) {
+              const to = new Date(dateTo);
+              // include the day by setting end of day
+              to.setHours(23,59,59,999);
+              if (txnDate > to) return false;
+            }
+          }
+        } catch (e) {
+          // ignore parse errors and include item
+        }
       }
 
       return true;
@@ -199,6 +226,11 @@ export default function Disputes() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Debug Info */}
+      <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+        Disputes: {disputes.length} loaded, {filteredDisputes.length} filtered | Dates: {dateFrom} to {dateTo}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

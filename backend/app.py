@@ -663,7 +663,7 @@ async def get_summary(user: dict = Depends(get_current_user)):
 
 @app.post("/api/v1/upload", status_code=201)
 async def upload_files(
-    cycle: str = Query("1C", description="Cycle e.g., 1C..10C"),
+    cycle: Optional[str] = Query(None, description="Cycle e.g., 1C..10C"),
     run_date: str = Query(None, description="Run date YYYY-MM-DD"),
     direction: str = Query("INWARD", description="INWARD or OUTWARD"),
     cbs_inward: UploadFile = File(None),
@@ -680,9 +680,9 @@ async def upload_files(
     try:
         run_id = f"RUN_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        # Validate cycle format
+        # Validate cycle format only if provided
         valid_cycles = [f"{i}C" for i in range(1, 11)]
-        if cycle not in valid_cycles:
+        if cycle and cycle not in valid_cycles:
             raise HTTPException(status_code=400, detail=f"Invalid cycle. Valid cycles: {', '.join(valid_cycles)}")
 
         # Required file mapping
@@ -733,6 +733,8 @@ async def upload_files(
         invalid_files = []
         validation_warnings = []
         MAX_BYTES = 100 * 1024 * 1024
+        # Map original filename -> field key (e.g., 'ntsl', 'npci_inward')
+        original_field_map: Dict[str, str] = {}
 
         for key, upfile in required_files.items():
             if upfile is None:
@@ -745,6 +747,8 @@ async def upload_files(
 
             try:
                 content = await upfile.read()
+                # Map original filename to the field key for later processing
+                original_field_map[upfile.filename] = key
             except Exception as e:
                 invalid_files.append({
                     "filename": upfile.filename,
@@ -809,8 +813,53 @@ async def upload_files(
                 error_response["warnings"] = validation_warnings
             raise HTTPException(status_code=400, detail=error_response)
 
+        # If NTSL file present and no cycle provided, try to extract cycle from filename or file content
+        per_file_cycles: Dict[str, str] = {}
+        try:
+            import re
+            for fname, content in list(uploaded_files_content.items()):
+                mapped_field = original_field_map.get(fname)
+                if mapped_field == 'ntsl':
+                    # Try filename pattern: ^(Cycle\d+)_(\d{4}-\d{2}-\d{2})_(.+)$
+                    m = re.match(r'^(Cycle\d+)_(\d{4}-\d{2}-\d{2})_(.+)$', fname, flags=re.IGNORECASE)
+                    extracted_cycle = None
+                    if m:
+                        grp = m.group(1)  # e.g., Cycle1
+                        dig = re.search(r'\d+', grp)
+                        if dig:
+                            extracted_cycle = f"{dig.group()}C"
+                    if not extracted_cycle:
+                        # Fallback: try to extract from file content (first few lines)
+                        try:
+                            text = content.decode('utf-8', errors='ignore')
+                            lines = text.splitlines()[:10]
+                            for line in lines:
+                                rm = re.search(r'Cycle\s*[:=_-]?\s*(?:Cycle)?(\d+)', line, flags=re.IGNORECASE)
+                                if rm:
+                                    extracted_cycle = f"{rm.group(1)}C"
+                                    break
+                                rm2 = re.search(r'(\d{1,2}C)', line, flags=re.IGNORECASE)
+                                if rm2:
+                                    extracted_cycle = rm2.group(1).upper()
+                                    break
+                        except Exception:
+                            extracted_cycle = None
+
+                    if not extracted_cycle:
+                        raise HTTPException(status_code=400, detail={"error": "Could not determine cycle for NTSL file", "file": fname})
+
+                    per_file_cycles[fname] = extracted_cycle
+                    # If run-level cycle absent, set it to extracted cycle for compatibility
+                    if not cycle:
+                        cycle = extracted_cycle
+        except HTTPException:
+            raise
+        except Exception:
+            # don't block other files if cycle extraction has issues here; let save handler manage
+            pass
+
         # Save files
-        run_folder = file_handler.save_uploaded_files(uploaded_files_content, run_id, cycle=cycle, direction=direction, run_date=run_date)
+        run_folder = file_handler.save_uploaded_files(uploaded_files_content, run_id, cycle=cycle, direction=direction, run_date=run_date, per_file_cycles=per_file_cycles)
 
         # Audit
         for fname, content in uploaded_files_content.items():

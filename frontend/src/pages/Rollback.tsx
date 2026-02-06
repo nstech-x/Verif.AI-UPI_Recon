@@ -401,10 +401,10 @@ export default function Rollback() {
                 <label className="text-sm font-semibold text-slate-700">Rollback Level</label>
                 <div className="grid grid-cols-5 gap-2">
                   {[
-                    { level: 'ttum' as RollbackLevel, icon: '📄', label: 'TTUM', color: 'purple' },
-                    { level: 'reports' as RollbackLevel, icon: '📊', label: 'Reports', color: 'blue' },
-                    { level: 'recon' as RollbackLevel, icon: '🔄', label: 'Recon', color: 'cyan' },
                     { level: 'file' as RollbackLevel, icon: '📁', label: 'File', color: 'green' },
+                    { level: 'recon' as RollbackLevel, icon: '🔄', label: 'Recon', color: 'cyan' },
+                    { level: 'reports' as RollbackLevel, icon: '📊', label: 'Reports', color: 'blue' },
+                    { level: 'ttum' as RollbackLevel, icon: '📄', label: 'TTUM', color: 'purple' },
                     { level: 'complete' as RollbackLevel, icon: '💣', label: 'Complete', color: 'red' },
                   ].map(({ level, icon, label, color }) => {
                     const colorMap: Record<string, { border: string; bg: string; hover: string }> = {
@@ -575,33 +575,33 @@ export default function Rollback() {
 
           {/* Level Descriptions */}
           <div className="grid grid-cols-1 gap-4">
-            <Card className="border-purple-200 bg-purple-50">
+            <Card className="border-green-200 bg-green-50">
               <CardContent className="pt-6">
-                <h3 className="font-semibold text-purple-900 mb-2">📄 TTUM Rollback</h3>
-                <p className="text-sm text-purple-800">Undo TTUM report generation. **Guardrail:** Cannot rollback if TTUM files have been downloaded.</p>
-              </CardContent>
-            </Card>
-            <Card className="border-blue-200 bg-blue-50">
-              <CardContent className="pt-6">
-                <h3 className="font-semibold text-blue-900 mb-2">📊 Reports Rollback</h3>
-                <p className="text-sm text-blue-800">Undo all report generation (Matched, Unmatched, etc.) while preserving reconciliation data.</p>
+                <h3 className="font-semibold text-green-900 mb-2">File Rollback</h3>
+                <p className="text-sm text-green-800">Undo file upload and validation, returning to pre-upload state.</p>
               </CardContent>
             </Card>
             <Card className="border-cyan-200 bg-cyan-50">
               <CardContent className="pt-6">
-                <h3 className="font-semibold text-cyan-900 mb-2">🔄 Recon Rollback</h3>
+                <h3 className="font-semibold text-cyan-900 mb-2">Recon Rollback</h3>
                 <p className="text-sm text-cyan-800">Undo reconciliation process, reverting to uploaded file state.</p>
               </CardContent>
             </Card>
-            <Card className="border-green-200 bg-green-50">
+            <Card className="border-blue-200 bg-blue-50">
               <CardContent className="pt-6">
-                <h3 className="font-semibold text-green-900 mb-2">📁 File Rollback</h3>
-                <p className="text-sm text-green-800">Undo file upload and validation, returning to pre-upload state.</p>
+                <h3 className="font-semibold text-blue-900 mb-2">Reports Rollback</h3>
+                <p className="text-sm text-blue-800">Undo all report generation (Matched, Unmatched, etc.) while preserving reconciliation data.</p>
+              </CardContent>
+            </Card>
+            <Card className="border-purple-200 bg-purple-50">
+              <CardContent className="pt-6">
+                <h3 className="font-semibold text-purple-900 mb-2">TTUM Rollback</h3>
+                <p className="text-sm text-purple-800">Undo TTUM report generation. **Guardrail:** Cannot rollback if TTUM files have been downloaded.</p>
               </CardContent>
             </Card>
             <Card className="border-red-200 bg-red-50">
               <CardContent className="pt-6">
-                <h3 className="font-semibold text-red-900 mb-2">💣 Complete Rollback</h3>
+                <h3 className="font-semibold text-red-900 mb-2">Complete Rollback</h3>
                 <p className="text-sm text-red-800"><strong>WARNING:</strong> Full reset to initial state. All operations, files, and data will be deleted.</p>
               </CardContent>
             </Card>

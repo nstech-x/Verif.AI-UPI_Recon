@@ -1,4 +1,5 @@
 import { useState } from "react";
+import React from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -65,8 +66,18 @@ const APPROVAL_HISTORY = [
   }
 ];
 
-export default function MakerChecker() {
+interface MakerCheckerProps {
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
   const { toast } = useToast();
+  
+  // Log on mount to verify component loads with date props
+  React.useEffect(() => {
+    console.log('[MakerChecker] Mounted with dates:', { dateFrom, dateTo });
+  }, [dateFrom, dateTo]);
 
   const handleApprove = (id: string) => {
     toast({
@@ -98,6 +109,11 @@ export default function MakerChecker() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Debug Info */}
+      <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
+        Maker-Checker | Pending: {PENDING_APPROVALS.length} | History: {APPROVAL_HISTORY.length} | Dates: {dateFrom} to {dateTo}
+      </div>
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -159,7 +175,7 @@ export default function MakerChecker() {
         </TabsList>
 
         {/* Pending Approvals */}
-        <TabsContent value="pending" className="mt-6">
+          <TabsContent value="pending" className="mt-6">
           <Card>
             <CardHeader>
               <CardTitle>Pending Approval Requests</CardTitle>
@@ -178,7 +194,24 @@ export default function MakerChecker() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {PENDING_APPROVALS.map((approval) => (
+                  {PENDING_APPROVALS.filter(a => {
+                    if (!dateFrom && !dateTo) return true;
+                    try {
+                      const created = new Date(a.createdAt);
+                      if (dateFrom) {
+                        const from = new Date(dateFrom);
+                        if (created < from) return false;
+                      }
+                      if (dateTo) {
+                        const to = new Date(dateTo);
+                        to.setHours(23,59,59,999);
+                        if (created > to) return false;
+                      }
+                      return true;
+                    } catch (e) {
+                      return true;
+                    }
+                  }).map((approval) => (
                     <TableRow key={approval.id}>
                       <TableCell className="font-medium">
                         {formatAction(approval.action)}
@@ -254,7 +287,24 @@ export default function MakerChecker() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {APPROVAL_HISTORY.map((item) => (
+                  {APPROVAL_HISTORY.filter(item => {
+                    if (!dateFrom && !dateTo) return true;
+                    try {
+                      const approved = new Date(item.approvedAt);
+                      if (dateFrom) {
+                        const from = new Date(dateFrom);
+                        if (approved < from) return false;
+                      }
+                      if (dateTo) {
+                        const to = new Date(dateTo);
+                        to.setHours(23,59,59,999);
+                        if (approved > to) return false;
+                      }
+                      return true;
+                    } catch (e) {
+                      return true;
+                    }
+                  }).map((item) => (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">
                         {formatAction(item.action)}

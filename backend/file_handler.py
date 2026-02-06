@@ -11,34 +11,24 @@ class FileHandler:
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         os.makedirs(OUTPUT_DIR, exist_ok=True)
     
-    def save_uploaded_files(self, files: Dict, run_id: str, cycle: str = None, direction: str = None, run_date: str = None) -> str:
+    def save_uploaded_files(self, files: Dict, run_id: str, cycle: str = None, direction: str = None, run_date: str = None, per_file_cycles: Dict[str, str] = None) -> str:
         """Save uploaded files to timestamped folder with standardized naming - Windows compatible
         Supports cycle subfolders and direction metadata. Returns run_folder path.
         """
-        # Prepare run folder and cycle subfolder
+        # Prepare run folder (kept for backward compatibility)
         run_folder = os.path.join(UPLOAD_DIR, run_id)
         os.makedirs(run_folder, exist_ok=True)
 
-        # If cycle provided, use simple cycle naming like cycle_C1
+        # Normalize run-level cycle
         cycle_id = None
         if cycle:
-            # Use simple cycle naming as requested (e.g., cycle_C1)
             safe_cycle = str(cycle).strip().replace(' ', '_')
             cycle_id = safe_cycle
 
-            cycle_folder_name = f"cycle_{cycle_id}"
-            run_folder = os.path.join(run_folder, cycle_folder_name)
-            os.makedirs(run_folder, exist_ok=True)
-
-        # If direction provided, create direction subfolder
+        # Normalize direction (used as fallback per-file)
+        direction_global = None
         if direction:
-            # Use "inward" for inward and "outward" for outward as requested
-            if direction.upper() == 'INWARD':
-                dir_folder = 'inward'
-            else:
-                dir_folder = 'outward'
-            run_folder = os.path.join(run_folder, dir_folder)
-            os.makedirs(run_folder, exist_ok=True)
+            direction_global = 'Inward' if direction.upper() == 'INWARD' else 'Outward'
 
         # Enhanced file type mapping with better pattern recognition
         file_type_mapping = {
@@ -61,8 +51,7 @@ class FileHandler:
             # Generate standardized filename with timestamp and validation
             standardized_name = self._generate_standardized_filename(file_type, filename)
 
-            # place file inside cycle subfolder if provided in mapping
-            # If 'cycle_' already in run_id path, keep it
+            # place file inside run folder (legacy location)
             file_path = os.path.join(run_folder, standardized_name)
 
             try:
@@ -90,7 +79,8 @@ class FileHandler:
                         'file_type': file_type,
                         'original_name': filename,
                         'file_size': len(file_content),
-                        'saved_at': os.path.getctime(file_path)
+                        'saved_at': os.path.getctime(file_path),
+                        'legacy_path': file_path
                     }
                     logger.info(f"✅ Saved file: {standardized_name} (original: {filename}, type: {file_type})")
                 else:
@@ -119,6 +109,54 @@ class FileHandler:
                 json.dump(meta, f, indent=2)
         except Exception:
             pass
+
+        # ALSO store files in new structured layout: uploads/{filename}/[Inward|Outward]/ or uploads/{filename}/Cycles/{CycleN}/{Inward|Outward}/
+        for filename, file_content in files.items():
+            try:
+                base_name = os.path.splitext(filename)[0]
+                per_cycle = None
+                if per_file_cycles and filename in per_file_cycles:
+                    per_cycle = per_file_cycles[filename]
+
+                # determine direction: prefer global direction, else infer from filename
+                if direction_global:
+                    dir_folder = direction_global
+                else:
+                    if 'out' in filename.lower() or 'ow' in filename.lower() or 'outward' in filename.lower():
+                        dir_folder = 'Outward'
+                    else:
+                        dir_folder = 'Inward'
+
+                if per_cycle:
+                    dest_dir = os.path.join(UPLOAD_DIR, base_name, 'Cycles', per_cycle, dir_folder)
+                elif cycle_id:
+                    dest_dir = os.path.join(UPLOAD_DIR, base_name, 'Cycles', cycle_id, dir_folder)
+                else:
+                    dest_dir = os.path.join(UPLOAD_DIR, base_name, dir_folder)
+
+                os.makedirs(dest_dir, exist_ok=True)
+                dest_path = os.path.join(dest_dir, file_metadata[filename]['standardized_name'])
+                # copy from legacy path if exists, otherwise write bytes directly
+                legacy = file_metadata[filename].get('legacy_path')
+                if legacy and os.path.exists(legacy):
+                    try:
+                        import shutil
+                        shutil.copy2(legacy, dest_path)
+                    except Exception:
+                        # fallback to writing content
+                        with open(dest_path, 'wb') as f:
+                            f.write(file_content)
+                else:
+                    with open(dest_path, 'wb') as f:
+                        f.write(file_content)
+
+                # record new path in metadata
+                file_metadata[filename]['structured_path'] = dest_path
+            except Exception as e:
+                try:
+                    logger.warning(f"Could not copy file {filename} to structured path: {e}")
+                except Exception:
+                    pass
 
         return run_folder
 
