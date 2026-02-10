@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { ChartContainer } from "../components/ui/chart";
 import { toast } from "sonner";
+import { cn } from "../lib/utils";
 
 // Chart colors
 const COLORS = {

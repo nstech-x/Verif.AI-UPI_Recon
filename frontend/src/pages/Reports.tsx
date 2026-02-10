@@ -21,7 +21,6 @@ import { Textarea } from "../components/ui/textarea";
 import { Download, Loader2, Plus, FileText, Calendar } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { useToast } from "../hooks/use-toast";
-import { AxiosResponse } from "axios";
 
 // Report category definitions
 interface ReportDefinition {
@@ -41,276 +40,180 @@ interface ReportCategory {
 const REPORT_CATEGORIES: Record<string, ReportCategory> = {
   listing: {
     name: "Listing Reports",
-    description: "Pre-Reconciliation Listing - Raw ingestion files from 6 core data sources",
+    description: "Raw ingestion listings from CBS, Switch, and NPCI sources",
     reports: [
       {
-        id: "cbs_beneficiary",
-        name: "CBS Beneficiary (Raw)",
-        description: "Raw beneficiary data from Core Banking System",
+        id: "cbs_beneficiary_listing",
+        name: "CBS Beneficiary Listing (Inward)",
+        description: "Raw CBS inward listing (beneficiary)",
         format: "CSV",
       },
       {
-        id: "cbs_remitter",
-        name: "CBS Remitter (Raw)",
-        description: "Raw remitter data from Core Banking System",
+        id: "cbs_remitter_listing",
+        name: "CBS Remitter Listing (Outward)",
+        description: "Raw CBS outward listing (remitter)",
         format: "CSV",
       },
       {
-        id: "switch_inward",
-        name: "Switch Inward (Raw)",
-        description: "Raw inward transaction data from Switch",
+        id: "switch_listing_inward",
+        name: "Switch Listing (Inward)",
+        description: "Raw switch inward transactions",
         format: "CSV",
       },
       {
-        id: "switch_outward",
-        name: "Switch Outward (Raw)",
-        description: "Raw outward transaction data from Switch",
+        id: "switch_listing_outward",
+        name: "Switch Listing (Outward)",
+        description: "Raw switch outward transactions",
         format: "CSV",
       },
       {
-        id: "npci_inward",
-        name: "NPCI Inward (Raw)",
-        description: "Raw inward transaction data from NPCI",
+        id: "npci_beneficiary_listing",
+        name: "NPCI Beneficiary Listing (Inward)",
+        description: "Raw NPCI inward transactions",
         format: "CSV",
       },
       {
-        id: "npci_outward",
-        name: "NPCI Outward (Raw)",
-        description: "Raw outward transaction data from NPCI",
+        id: "npci_remitter_listing",
+        name: "NPCI Remitter Listing (Outward)",
+        description: "Raw NPCI outward transactions",
         format: "CSV",
       },
     ],
   },
   reconciliation: {
     name: "Reconciliation Reports",
-    description: "Reconciliation reports with 3 comparison pairs plus Hanging Transactions",
-    subcategories: {
-      inward: {
-        name: "Inward Direction",
-        description: "Credit/Inward transactions reconciliation",
-        reports: [
-          {
-            id: "gl_switch_matched_inward",
-            name: "GL vs. Switch - Matched",
-            description: "Inward transactions matched between GL and Switch",
-            format: "CSV",
-          },
-          {
-            id: "gl_switch_unmatched_inward",
-            name: "GL vs. Switch - Unmatched (with Ageing)",
-            description: "Inward transactions unmatched between GL and Switch with aging",
-            format: "CSV",
-          },
-          {
-            id: "switch_network_matched_inward",
-            name: "Switch vs. Network - Matched",
-            description: "Inward transactions matched between Switch and Network",
-            format: "CSV",
-          },
-          {
-            id: "switch_network_unmatched_inward",
-            name: "Switch vs. Network - Unmatched (with Ageing)",
-            description: "Inward transactions unmatched between Switch and Network",
-            format: "CSV",
-          },
-          {
-            id: "gl_network_matched_inward",
-            name: "GL vs. Network - Matched",
-            description: "Inward transactions matched between GL and Network",
-            format: "CSV",
-          },
-          {
-            id: "gl_network_unmatched_inward",
-            name: "GL vs. Network - Unmatched (with Ageing)",
-            description: "Inward transactions unmatched between GL and Network",
-            format: "CSV",
-          },
-          {
-            id: "hanging_transactions_inward",
-            name: "Hanging Transactions",
-            description: "Inward transactions stuck in intermediate state",
-            format: "CSV",
-          },
-        ],
-      },
-      outward: {
-        name: "Outward Direction",
-        description: "Debit/Outward transactions reconciliation",
-        reports: [
-          {
-            id: "gl_switch_matched_outward",
-            name: "GL vs. Switch - Matched",
-            description: "Outward transactions matched between GL and Switch",
-            format: "CSV",
-          },
-          {
-            id: "gl_switch_unmatched_outward",
-            name: "GL vs. Switch - Unmatched (with Ageing)",
-            description: "Outward transactions unmatched between GL and Switch",
-            format: "CSV",
-          },
-          {
-            id: "switch_network_matched_outward",
-            name: "Switch vs. Network - Matched",
-            description: "Outward transactions matched between Switch and Network",
-            format: "CSV",
-          },
-          {
-            id: "switch_network_unmatched_outward",
-            name: "Switch vs. Network - Unmatched (with Ageing)",
-            description: "Outward transactions unmatched between Switch and Network",
-            format: "CSV",
-          },
-          {
-            id: "gl_network_matched_outward",
-            name: "GL vs. Network - Matched",
-            description: "Outward transactions matched between GL and Network",
-            format: "CSV",
-          },
-          {
-            id: "gl_network_unmatched_outward",
-            name: "GL vs. Network - Unmatched (with Ageing)",
-            description: "Outward transactions unmatched between GL and Network",
-            format: "CSV",
-          },
-          {
-            id: "hanging_transactions_outward",
-            name: "Hanging Transactions",
-            description: "Outward transactions stuck in intermediate state",
-            format: "CSV",
-          },
-        ],
-      },
-    },
-  },
-  ttum_annexure: {
-    name: "TTUM & Annexure",
-    description: "TTUM consolidated report and Annexure files (I-IV)",
-    subcategories: {
-      consolidated: {
-        name: "Consolidated TTUM",
-        description: "Complete TTUM report package",
-        reports: [
-          {
-            id: "ttum_consolidated",
-            name: "Consolidated TTUM Report",
-            description: "Complete TTUM with Refund, Recovery, Auto-credit, etc.",
-            format: "ZIP",
-          },
-        ],
-      },
-      annexures: {
-        name: "Annexure Files",
-        description: "Individual annexure reports",
-        reports: [
-          {
-            id: "annexure_i",
-            name: "Annexure I (Raw)",
-            description: "Raw Annexure I data for detailed review",
-            format: "CSV",
-          },
-          {
-            id: "annexure_ii",
-            name: "Annexure II (Raw)",
-            description: "Raw Annexure II data for detailed review",
-            format: "CSV",
-          },
-          {
-            id: "annexure_iii",
-            name: "Annexure III (Adjustment Report)",
-            description: "Adjustment report with reconciliation details",
-            format: "CSV",
-          },
-          {
-            id: "annexure_iv",
-            name: "Annexure IV (Bulk Upload)",
-            description: "Bulk upload format for system import",
-            format: "XLSX",
-          },
-        ],
-      },
-    },
-  },
-  rbi_regulatory: {
-    name: "RBI / Regulatory Reports",
-    description: "Regulatory compliance and RBI submission reports",
-    subcategories: {
-      settlement: {
-        name: "Settlement Reports",
-        description: "Daily settlement and clearing reports",
-        reports: [
-          {
-            id: "daily_settlement",
-            name: "Daily Settlement Report",
-            description: "Daily UPI settlement report for RBI submission",
-            format: "PDF",
-          },
-          {
-            id: "npci_clearing",
-            name: "NPCI Clearing Report",
-            description: "NPCI clearing summary with net positions",
-            format: "XLSX",
-          },
-        ],
-      },
-      aging: {
-        name: "Aging Reports",
-        description: "Transaction aging analysis",
-        reports: [
-          {
-            id: "unmatched_aging",
-            name: "Unmatched Transactions Aging",
-            description: "Age-wise breakup of unmatched transactions",
-            format: "CSV",
-          },
-        ],
-      },
-      disputes: {
-        name: "Disputes & Chargebacks",
-        description: "Dispute and chargeback tracking",
-        reports: [
-          {
-            id: "dispute_summary",
-            name: "Dispute Summary Report",
-            description: "Summary of open, working, and closed disputes",
-            format: "CSV",
-          },
-        ],
-      },
-    },
-  },
-  legacy: {
-    name: "Legacy Reports",
-    description: "Standard reconciliation reports for backward compatibility",
+    description: "Matched/Unmatched and operational reconciliation outputs",
     reports: [
       {
-        id: "matched_json",
-        name: "Matched Transactions (JSON)",
+        id: "matched_transactions",
+        name: "Matched Transactions",
         description: "All successfully matched transactions",
-        format: "JSON",
-      },
-      {
-        id: "unmatched_json",
-        name: "Unmatched Transactions (JSON)",
-        description: "Transactions that couldn't be matched",
-        format: "JSON",
-      },
-      {
-        id: "summary_json",
-        name: "Reconciliation Summary (JSON)",
-        description: "Complete summary with statistics",
-        format: "JSON",
-      },
-      {
-        id: "matched_csv",
-        name: "Matched Transactions (CSV)",
-        description: "Matched transactions in CSV format",
         format: "CSV",
       },
       {
-        id: "unmatched_csv",
-        name: "Unmatched Transactions (CSV)",
-        description: "Unmatched transactions in CSV format",
+        id: "unmatched_transactions",
+        name: "Unmatched Transactions",
+        description: "All unmatched transactions and exceptions",
+        format: "CSV",
+      },
+      {
+        id: "adjustment_report_listing",
+        name: "Adjustment Report Listing",
+        description: "Adjustment candidates and exception listing",
+        format: "CSV",
+      },
+      {
+        id: "switch_status_update",
+        name: "Switch Status Update",
+        description: "Status update file for switch operations",
+        format: "CSV",
+      },
+    ],
+  },
+  ttum_annexure: {
+    name: "TTUM & Annexure",
+    description: "TTUM listings and NPCI bulk upload formats",
+    reports: [
+      {
+        id: "ttum_receivable_inward",
+        name: "TTUM Listing - Receivable / Inward GL",
+        description: "TTUM candidates for inward GL receivables",
+        format: "CSV",
+      },
+      {
+        id: "ttum_payable_outward",
+        name: "TTUM Listing - Payable / Outward GL",
+        description: "TTUM candidates for outward GL payables",
+        format: "CSV",
+      },
+      {
+        id: "annexure_iv_tcc_ret",
+        name: "NPCI Bulk Upload - Time out (TCC & RET Cases)",
+        description: "Annexure IV format for TCC and RET cases",
+        format: "CSV",
+      },
+      {
+        id: "annexure_iv_drc_rrc",
+        name: "NPCI Bulk Upload - DRC & RRC",
+        description: "Annexure IV format for DRC/RRC cases",
+        format: "CSV",
+      },
+      {
+        id: "adjustment_report",
+        name: "Adjustment Report",
+        description: "Adjustment summary report (Annexure III)",
+        format: "CSV",
+      },
+    ],
+  },
+  settlement_ntsl: {
+    name: "Settlement & NTSL",
+    description: "NTSL settlement TTUM and settlement extracts",
+    reports: [
+      {
+        id: "ntsl_settlement_ttum_sponsor",
+        name: "NTSL Settlement TTUM (Sponsor Bank)",
+        description: "Sponsor bank TTUM listing for NTSL settlement",
+        format: "CSV",
+      },
+      {
+        id: "ntsl_settlement_ttum_submember",
+        name: "NTSL Settlement TTUM (Sub-Member Bank)",
+        description: "Sub-member bank TTUM listing for NTSL settlement",
+        format: "CSV",
+      },
+      {
+        id: "monthly_settlement_ntsl",
+        name: "Monthly Settlement Report - NTSL Extract",
+        description: "Monthly NTSL settlement extract",
+        format: "CSV",
+      },
+    ],
+  },
+  compliance: {
+    name: "Compliance & MIS",
+    description: "MIS, GL justification, disputes, and RBI reporting",
+    reports: [
+      {
+        id: "gl_justification",
+        name: "GL Justification",
+        description: "GL justification / proofing report",
+        format: "CSV",
+      },
+      {
+        id: "mis_daily",
+        name: "MIS (Daily) - Interchange & GST",
+        description: "Daily MIS report (Interchange & GST)",
+        format: "CSV",
+      },
+      {
+        id: "mis_weekly",
+        name: "MIS (Weekly) - Interchange & GST",
+        description: "Weekly MIS report (Interchange & GST)",
+        format: "CSV",
+      },
+      {
+        id: "mis_monthly",
+        name: "MIS (Monthly) - Interchange & GST",
+        description: "Monthly MIS report (Interchange & GST)",
+        format: "CSV",
+      },
+      {
+        id: "income_expense_datewise",
+        name: "Datewise Income - Expense Report",
+        description: "Datewise income and expense summary",
+        format: "CSV",
+      },
+      {
+        id: "dispute_tracker",
+        name: "Dispute Tracker",
+        description: "Dispute tracking report",
+        format: "CSV",
+      },
+      {
+        id: "rbi_reporting",
+        name: "RBI Reporting",
+        description: "Regulatory summary for RBI reporting",
         format: "CSV",
       },
     ],
@@ -358,70 +261,88 @@ export default function Reports() {
     try {
       setIsDownloading(true);
 
-      // S3 Root URLs
-      const S3_REPORTS_URL = "https://nstechx.s3.ap-south-1.amazonaws.com/reports/";
-      const S3_TTUM_URL = "https://nstechx.s3.ap-south-1.amazonaws.com/ttum/";
-      const S3_ROOT_URL = "https://nstechx.s3.ap-south-1.amazonaws.com/";
-
-      // Mapping of Report IDs to their exact S3 filenames
-      const s3FileMapping: Record<string, { url: string; name: string }> = {
-        // Reconciliation Reports
-        "gl_network_matched_inward": { url: S3_REPORTS_URL, name: "GL_vs_NPCI_Inward.xlsx" },
-        "gl_network_matched_outward": { url: S3_REPORTS_URL, name: "GL_vs_NPCI_Outward.xlsx" },
-        "gl_switch_matched_inward": { url: S3_REPORTS_URL, name: "GL_vs_Switch_Inward.xlsx" },
-        "gl_switch_matched_outward": { url: S3_REPORTS_URL, name: "GL_vs_Switch_Outward.xlsx" },
-        "switch_network_matched_inward": { url: S3_REPORTS_URL, name: "Switch_vs_NPCI_Inward.xlsx" },
-        "switch_network_matched_outward": { url: S3_REPORTS_URL, name: "Switch_vs_NPCI_Outward.xlsx" },
-        
-        // Annexures
-        "annexure_i": { url: S3_REPORTS_URL, name: "ANNEXURE_I.xlsx" },
-        "annexure_ii": { url: S3_REPORTS_URL, name: "ANNEXURE_II.xlsx" },
-        "annexure_iii": { url: S3_REPORTS_URL, name: "ANNEXURE_III.xlsx" },
-        "annexure_iv": { url: S3_REPORTS_URL, name: "ANNEXURE_IV.xlsx" },
-        
-        // Exceptions & Aging
-        "unmatched_aging": { url: S3_REPORTS_URL, name: "Unmatched_Inward_Ageing.xlsx" },
-        "ttum_candidates": { url: S3_REPORTS_URL, name: "ttum_candidates.xlsx" },
-        
-        // TTUM Packages
-        "ttum_consolidated": { url: S3_TTUM_URL, name: "ttum_RUN_20260108_023831.zip" }
+      const reportKeyMapping: Record<string, string> = {
+        cbs_beneficiary_listing: "download/cbs_beneficiary_listing",
+        cbs_remitter_listing: "download/cbs_remitter_listing",
+        switch_listing_inward: "download/switch_listing_inward",
+        switch_listing_outward: "download/switch_listing_outward",
+        npci_beneficiary_listing: "download/npci_beneficiary_listing",
+        npci_remitter_listing: "download/npci_remitter_listing",
+        adjustment_report_listing: "download/adjustment_report_listing",
+        matched_transactions: "download/matched_transactions",
+        unmatched_transactions: "download/unmatched_transactions",
+        ttum_receivable_inward: "download/ttum_receivable_inward",
+        ttum_payable_outward: "download/ttum_payable_outward",
+        switch_status_update: "download/switch_status_update",
+        ntsl_settlement_ttum_sponsor: "download/ntsl_settlement_ttum_sponsor",
+        ntsl_settlement_ttum_submember: "download/ntsl_settlement_ttum_submember",
+        gl_justification: "download/gl_justification",
+        annexure_iv_tcc_ret: "download/annexure_iv_tcc_ret",
+        annexure_iv_drc_rrc: "download/annexure_iv_drc_rrc",
+        adjustment_report: "download/adjustment_report",
+        mis_daily: "download/mis_daily",
+        mis_weekly: "download/mis_weekly",
+        mis_monthly: "download/mis_monthly",
+        income_expense_datewise: "download/income_expense_datewise",
+        monthly_settlement_ntsl: "download/monthly_settlement_ntsl",
+        dispute_tracker: "download/dispute_tracker",
+        rbi_reporting: "download/rbi_reporting",
       };
 
-      const fileInfo = s3FileMapping[selectedReportData.id];
-
-      if (fileInfo) {
-        const downloadUrl = `${fileInfo.url}${fileInfo.name}`;
-        
-        // Create temporary link to trigger download
-        const link = document.createElement("a");
-        link.href = downloadUrl;
-        link.setAttribute("download", fileInfo.name);
-        link.setAttribute("target", "_blank");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-        toast({
-          title: "Download Started",
-          description: `${fileInfo.name} is being downloaded from S3.`,
-        });
-      } else {
+      const endpoint = reportKeyMapping[selectedReportData.id];
+      if (!endpoint) {
         toast({
           title: "File Not Found",
-          description: "The requested report is not available in the demo S3 bucket.",
+          description: "The requested report is not available in the backend.",
           variant: "destructive",
         });
+        return;
       }
+
+      const formatDate = (value: Date) => value.toISOString().slice(0, 10);
+      const now = new Date();
+      let dateFrom = now;
+      let dateTo = now;
+      if (dateRange === "week") {
+        dateFrom = new Date(now);
+        dateFrom.setDate(now.getDate() - 6);
+      } else if (dateRange === "month") {
+        dateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else if (dateRange === "custom") {
+        dateFrom = new Date(now);
+        dateFrom.setDate(now.getDate() - 30);
+      }
+
+      const params: Record<string, string> = {};
+      if (["mis_daily", "mis_weekly", "mis_monthly", "income_expense_datewise"].includes(selectedReportData.id)) {
+        params.date_from = formatDate(dateFrom);
+        params.date_to = formatDate(dateTo);
+      }
+
+      const response = await apiClient.downloadReport(endpoint, Object.keys(params).length ? params : undefined);
+
+      const disposition = response.headers["content-disposition"] as string | undefined;
+      const filenameMatch = disposition?.match(/filename="?([^"]+)"?/i);
+      const fallbackName = `${selectedReportData.id}.${selectedReportData.format.toLowerCase()}`;
+      const filename = filenameMatch?.[1] || fallbackName;
+
+      apiClient.triggerFileDownload(response.data, filename);
+
+      toast({
+        title: "Download Started",
+        description: `${filename} is being downloaded from the backend.`,
+      });
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to connect to S3 storage.",
+        description: "Failed to download report from backend.",
         variant: "destructive",
       });
     } finally {
       setIsDownloading(false);
     }
   };
+
 
   const handleCreateReportType = () => {
     // Demo mode - just show success toast

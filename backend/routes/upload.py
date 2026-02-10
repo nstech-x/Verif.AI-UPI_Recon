@@ -11,10 +11,31 @@ from config import UPLOAD_DIR
 from core.security import get_current_user
 from dependencies import audit, file_handler, rollback_manager
 from services.file_validation import validate_file_columns
+from services.file_naming import parse_upi_filename
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["upload"])
+
+
+def _load_requirements() -> Dict:
+    cfg_path = os.path.join(os.path.dirname(__file__), "..", "config", "file_requirements.json")
+    cfg_path = os.path.abspath(cfg_path)
+    if not os.path.exists(cfg_path):
+        return {"required_counts": {}, "required_rows": {}}
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {"required_counts": {}, "required_rows": {}}
+
+
+def _load_run_metadata(run_id: str) -> Dict:
+    meta_path = os.path.join(UPLOAD_DIR, run_id, "metadata.json")
+    if not os.path.exists(meta_path):
+        return {}
+    with open(meta_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 @router.post("/upload", status_code=201)
@@ -22,6 +43,7 @@ async def upload_files(
     cycle: Optional[str] = Query(None, description="Cycle e.g., 1C..10C"),
     run_date: str = Query(None, description="Run date YYYY-MM-DD"),
     direction: str = Query("INWARD", description="INWARD or OUTWARD"),
+    uploaded_by: Optional[str] = Query(None, description="Uploader username or AUTO"),
     cbs_inward: UploadFile = File(None),
     cbs_outward: UploadFile = File(None),
     switch: UploadFile = File(None),
@@ -70,6 +92,13 @@ async def upload_files(
             for upfile in files:
                 fname = upfile.filename.lower()
                 assigned = False
+                parsed = parse_upi_filename(upfile.filename)
+                if parsed:
+                    if parsed.get("direction") == "INWARD":
+                        optional_multi_files['npci_inward'].append(upfile)
+                    else:
+                        optional_multi_files['npci_outward'].append(upfile)
+                    assigned = True
                 if 'cbs' in fname and 'in' in fname:
                     if required_files['cbs_inward'] is None:
                         required_files['cbs_inward'] = upfile
@@ -137,36 +166,59 @@ async def upload_files(
             """Validate filename format and date for NPCI/NTSL/Adjustment files."""
             if file_type not in ('npci_inward', 'npci_outward', 'ntsl', 'adjustment'):
                 return None
+
+            # Prefer new ISSR/ACQR naming convention
+            try:
+                from services.file_naming import parse_upi_filename
+                parsed = parse_upi_filename(filename)
+            except Exception:
+                parsed = None
+
+            if file_type in ('npci_inward', 'npci_outward'):
+                if parsed:
+                    # cycle mandatory for NPCI
+                    if not parsed.get('cycle'):
+                        return "NPCI filename must include cycle (e.g., _1C)"
+                    # direction must match
+                    if file_type == 'npci_inward' and parsed.get('direction') != 'INWARD':
+                        return "NPCI inward file must be ISSR (Issuer/Inward)"
+                    if file_type == 'npci_outward' and parsed.get('direction') != 'OUTWARD':
+                        return "NPCI outward file must be ACQR (Acquirer/Outward)"
+                    # date must be present
+                    if not parsed.get('date'):
+                        return "NPCI filename must include a valid date (DDMMYY)"
+                    return None
+
+            # Fallback legacy pattern
             name = filename.lower()
             import re
             cycle_match = re.search(r'cycle\s*0*(\d{1,2})', name)
             type_match = re.search(r'(?:^|[_-])(inward|outward)(?:[_-]|$)', name)
             date_match = re.search(r'(\d{2})(\d{2})(\d{4})', name)
 
-            if not cycle_match or not date_match or not type_match:
-                return "Filename must follow pattern cycle<no>_(inward|outward)_DDMMYYYY[_suffix]"
+            if file_type in ('npci_inward', 'npci_outward'):
+                if not cycle_match or not date_match or not type_match:
+                    return "NPCI filename must include cycle, direction, and date"
 
-            cycle_num = int(cycle_match.group(1))
-            if cycle_num < 1 or cycle_num > 10:
-                return "Cycle number in filename must be between 1 and 10"
+                cycle_num = int(cycle_match.group(1))
+                if cycle_num < 1 or cycle_num > 10:
+                    return "Cycle number in filename must be between 1 and 10"
 
-            dd = int(date_match.group(1))
-            mm = int(date_match.group(2))
-            yyyy = int(date_match.group(3))
+                dd = int(date_match.group(1))
+                mm = int(date_match.group(2))
+                yyyy = int(date_match.group(3))
 
-            try:
-                parsed = date(yyyy, mm, dd)
-            except Exception:
-                return "Invalid date in filename (expected DDMMYYYY)"
+                try:
+                    date(yyyy, mm, dd)
+                except Exception:
+                    return "Invalid date in filename (expected DDMMYYYY)"
 
-            if parsed != date.today():
-                return "Filename date must be today's date"
+                if file_type == 'npci_inward' and type_match.group(1) != 'inward':
+                    return "NPCI inward file name must include 'inward'"
+                if file_type == 'npci_outward' and type_match.group(1) != 'outward':
+                    return "NPCI outward file name must include 'outward'"
 
-            if file_type == 'npci_inward' and type_match.group(1) != 'inward':
-                return "NPCI inward file name must include 'inward'"
-            if file_type == 'npci_outward' and type_match.group(1) != 'outward':
-                return "NPCI outward file name must include 'outward'"
-
+            # NTSL cycle optional; no strict validation beyond presence of file
             return None
 
         def iter_files():
@@ -289,12 +341,14 @@ async def upload_files(
                             extracted_cycle = None
 
                     if not extracted_cycle:
-                        raise HTTPException(status_code=400, detail={"error": "Could not determine cycle for NTSL file", "file": fname})
+                        # NTSL cycle is optional; do not block upload
+                        extracted_cycle = None
 
-                    per_file_cycles[fname] = extracted_cycle
-                    # If run-level cycle absent, set it to extracted cycle for compatibility
-                    if not cycle:
-                        cycle = extracted_cycle
+                    if extracted_cycle:
+                        per_file_cycles[fname] = extracted_cycle
+                        # If run-level cycle absent, set it to extracted cycle for compatibility
+                        if not cycle:
+                            cycle = extracted_cycle
         except HTTPException:
             raise
         except Exception:
@@ -302,6 +356,7 @@ async def upload_files(
             pass
 
         # Save files
+        uploader = uploaded_by or user.get('username') or 'AUTO'
         run_folder = file_handler.save_uploaded_files(
             uploaded_files_content,
             run_id,
@@ -309,6 +364,7 @@ async def upload_files(
             direction=direction,
             run_date=run_date,
             per_file_cycles=per_file_cycles,
+            uploaded_by=uploader,
         )
 
         # Audit
@@ -374,6 +430,8 @@ async def get_upload_metadata(run_id: Optional[str] = None):
             "cycle_id": metadata.get('cycle_id'),
             "direction": metadata.get('direction'),
             "run_date": metadata.get('run_date'),
+            "files_detail": metadata.get('files_detail', {}),
+            "uploaded_by": metadata.get('uploaded_by'),
             "status": "success",
         }
 
@@ -385,3 +443,132 @@ async def get_upload_metadata(run_id: Optional[str] = None):
             "status": "error",
             "error": str(e),
         }
+
+
+@router.get("/upload/validation")
+async def get_upload_validation(run_id: Optional[str] = None):
+    """Return file count and row count validations for a run."""
+    try:
+        if not run_id:
+            runs = [d for d in os.listdir(UPLOAD_DIR) if d.startswith('RUN_')]
+            if not runs:
+                return {
+                    "run_id": None,
+                    "status": "no_runs_found",
+                    "summary": [],
+                }
+            run_id = sorted(runs)[-1]
+
+        metadata = _load_run_metadata(run_id)
+        files_detail = metadata.get("files_detail", {})
+
+        requirements = _load_requirements()
+        required_counts = requirements.get("required_counts", {})
+        required_rows = requirements.get("required_rows", {})
+
+        counts: Dict[str, int] = {}
+        for original_name, info in files_detail.items():
+            file_type = info.get("file_type", "unknown")
+            parsed = info.get("parsed") or parse_upi_filename(original_name) or {}
+            txn_type = (parsed.get("txn_type") or "").lower()
+
+            key = file_type
+            if file_type.startswith("npci_") and txn_type:
+                key = f"{file_type}_{txn_type}"
+
+            counts[key] = counts.get(key, 0) + 1
+
+        summary = []
+        for key, required in required_counts.items():
+            uploaded = counts.get(key, 0)
+            row_error = False
+            req_rows = required_rows.get(key)
+            if req_rows is not None:
+                for original_name, info in files_detail.items():
+                    file_type = info.get("file_type", "unknown")
+                    parsed = info.get("parsed") or parse_upi_filename(original_name) or {}
+                    txn_type = (parsed.get("txn_type") or "").lower()
+                    computed_key = file_type
+                    if file_type.startswith("npci_") and txn_type:
+                        computed_key = f"{file_type}_{txn_type}"
+                    if computed_key != key:
+                        continue
+                    if info.get("row_count", 0) != req_rows:
+                        row_error = True
+                        break
+            summary.append({
+                "key": key,
+                "required_count": required,
+                "uploaded_count": uploaded,
+                "error": uploaded < required or row_error,
+                "row_error": row_error,
+            })
+
+        return {
+            "run_id": run_id,
+            "status": "success",
+            "summary": summary,
+        }
+    except Exception as e:
+        logger.error(f"Validation summary error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to compute validation summary")
+
+
+@router.get("/upload/validation/detail")
+async def get_upload_validation_detail(run_id: Optional[str] = None, key: Optional[str] = None):
+    """Return row count validation detail for a specific file key."""
+    try:
+        if not run_id:
+            runs = [d for d in os.listdir(UPLOAD_DIR) if d.startswith('RUN_')]
+            if not runs:
+                return {
+                    "run_id": None,
+                    "status": "no_runs_found",
+                    "details": [],
+                }
+            run_id = sorted(runs)[-1]
+
+        if not key:
+            raise HTTPException(status_code=400, detail="key is required")
+
+        metadata = _load_run_metadata(run_id)
+        files_detail = metadata.get("files_detail", {})
+
+        requirements = _load_requirements()
+        required_rows = requirements.get("required_rows", {})
+        required_row_count = required_rows.get(key)
+
+        details = []
+        for original_name, info in files_detail.items():
+            file_type = info.get("file_type", "unknown")
+            parsed = info.get("parsed") or parse_upi_filename(original_name) or {}
+            txn_type = (parsed.get("txn_type") or "").lower()
+
+            computed_key = file_type
+            if file_type.startswith("npci_") and txn_type:
+                computed_key = f"{file_type}_{txn_type}"
+
+            if computed_key != key:
+                continue
+
+            row_count = info.get("row_count", 0)
+            row_error = required_row_count is not None and row_count != required_row_count
+            details.append({
+                "file_name": original_name,
+                "required_rows": required_row_count,
+                "uploaded_rows": row_count,
+                "uploaded_by": info.get("uploaded_by", metadata.get("uploaded_by", "AUTO")),
+                "error": row_error,
+            })
+
+        return {
+            "run_id": run_id,
+            "status": "success",
+            "required_rows": required_row_count,
+            "details": details,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Validation detail error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to compute validation detail")

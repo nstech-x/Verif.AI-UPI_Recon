@@ -42,12 +42,12 @@ export default function Disputes({ dateFrom, dateTo }: DisputesProps) {
   const [transactionAmount, setTransactionAmount] = useState("");
 
   useEffect(() => {
-    // Load demo disputes
-    const demoDisputes = generateDemoDisputes();
+    // Load demo disputes aligned to selected date range
+    const demoDisputes = generateDemoDisputes(dateFrom, dateTo);
     console.log('[Disputes] Demo disputes loaded:', demoDisputes.length, { dateFrom, dateTo });
     setDisputes(demoDisputes);
     filterDisputes(demoDisputes, activeTab, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus, dateFrom, dateTo);
-  }, []);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => {
     filterDisputes(disputes, activeTab, searchTerm, filterTxnSubtype, filterCategory, filterTATStatus, dateFrom, dateTo);
@@ -123,7 +123,7 @@ export default function Disputes({ dateFrom, dateTo }: DisputesProps) {
     setFilteredDisputes(filtered);
   };
 
-  const stats = getDisputeStats(disputes);
+  const stats = getDisputeStats((dateFrom || dateTo) ? filteredDisputes : disputes);
 
   // Get available categories based on selected subtype
   const availableCategories = getDisputeCategories(txnSubtype);

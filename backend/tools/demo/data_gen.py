@@ -4,14 +4,17 @@ NPCI / UPI compliant mock data generator for bank reconciliation testing.
 Aligned with Verif.ai UPI Functional Document V2 (06-Jan-2026).
 
 Generates reconciliation input files under backend/bank_recon_files using
-backend upload/validation-friendly naming and columns:
+bank-grade naming conventions:
   cbs_inward.csv
   cbs_outward.csv
   switch.csv
-  cycle01_inward_DDMMYYYY_npci_inward.csv
-  cycle01_outward_DDMMYYYY_npci_outward.csv
-  cycle01_inward_DDMMYYYY_ntsl.csv
-  cycle01_inward_DDMMYYYY_adjustment.csv
+  ISSRP2P<ISSR_BANK><DDMMYY>_<1-10>C.csv
+  ISSRP2M<ISSR_BANK><DDMMYY>_<1-10>C.csv
+  ACQRP2P<ACQR_BANK><DDMMYY>_<1-10>C.csv
+  ACQRP2M<ACQR_BANK><DDMMYY>_<1-10>C.csv
+  UPINTSLP<ACQR_BANK><DDMMYYYY>_<1-10>C.csv
+  UPIADJReportP<ACQR_BANK><DDMMYY>.csv
+  DRCReport<ACQR_BANK><DDMMYY>.csv
 
 Enhancements:
 - UPI fields included: UPI_Tran_ID, Payer_PSP, Payee_PSP, MCC, Originating_Channel
@@ -38,6 +41,17 @@ BACKEND_DIR = CURRENT_FILE.parents[2]
 # CONFIGURATION
 # -------------------------------------------------
 OUTPUT_DIR = BACKEND_DIR / "bank_recon_files"
+SUBDIRS = {
+    "cbs": "cbs",
+    "switch": "switch",
+    "npci_in_p2p": os.path.join("npci", "inward", "p2p"),
+    "npci_in_p2m": os.path.join("npci", "inward", "p2m"),
+    "npci_out_p2p": os.path.join("npci", "outward", "p2p"),
+    "npci_out_p2m": os.path.join("npci", "outward", "p2m"),
+    "ntsl": "ntsl",
+    "adjustment": "adjustment",
+    "drc": "drc",
+}
 NUM_MASTER_RECORDS = 300
 EXTRA_SWITCH_RECORDS = 12
 SEED = 42
@@ -45,15 +59,21 @@ SEED = 42
 RUN_TS = datetime.now()
 CYCLE_DATE = RUN_TS.strftime("%Y-%m-%d")
 DATE_DDMMYYYY = RUN_TS.strftime("%d%m%Y")
+DATE_DDMMYY = RUN_TS.strftime("%d%m%y")
 CYCLE_NO = 1
 CYCLE_ID = f"{CYCLE_NO}C"
 RUN_ID = f"RUN_{RUN_TS.strftime('%Y%m%d_%H%M%S')}"
 DIRECTION = "INWARD"
 
+ISSR_BANK = "PYBP"
+ACQR_BANK = "PYBL"
+
 random.seed(SEED)
 np.random.seed(SEED)
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+for sub in SUBDIRS.values():
+    os.makedirs(OUTPUT_DIR / sub, exist_ok=True)
 
 PAYER_PSP_CHOICES = [
     'GPay', 'PhonePe', 'Paytm', 'BHIM', 'AmazonPay', 'WhatsAppPay',
@@ -141,6 +161,7 @@ def generate_master(n):
         payee = random.choice(PAYEE_PSP_CHOICES)
         mcc = random.choice(MCC_CHOICES)
         channel = random.choice(ORIG_CHANNEL_CHOICES)
+        txn_subtype = random.choice(["P2P", "P2M"])
         rows.append({
             'Run_ID': RUN_ID,
             'Cycle_ID': CYCLE_ID,
@@ -161,6 +182,7 @@ def generate_master(n):
             'Payee_PSP': payee,
             'MCC': mcc,
             'Originating_Channel': channel,
+            'Txn_Subtype': txn_subtype,
             'Source': ''
         })
     return pd.DataFrame(rows)
@@ -292,21 +314,23 @@ settled['Source'] = 'NTSL'
 # -------------------------------------------------
 print('Writing output files...')
 
-def _write(df: pd.DataFrame, filename: str) -> None:
-    path = OUTPUT_DIR / filename
+def _write(df: pd.DataFrame, filename: str, subdir: str = "") -> None:
+    target_dir = OUTPUT_DIR / subdir if subdir else OUTPUT_DIR
+    os.makedirs(target_dir, exist_ok=True)
+    path = target_dir / filename
     if filename.lower().endswith(".xlsx"):
         df.to_excel(path, index=False)
     else:
         df.to_csv(path, index=False)
 
-_write(df_switch, "switch.csv")
+_write(df_switch, "switch.csv", SUBDIRS["switch"])
 
 # CBS Inward/Outward
 # Keep identical schema across all files
 common_cols = [
     'Run_ID', 'Cycle_ID', 'UPI_Tran_ID', 'RRN', 'Amount', 'Tran_Date', 'Transaction_Date',
     'Date', 'Dr_Cr', 'Debit_Credit', 'RC', 'Tran_Type', 'Status', 'Account_No', 'Beneficiary',
-    'Payer_PSP', 'Payee_PSP', 'MCC', 'Originating_Channel', 'Source'
+    'Payer_PSP', 'Payee_PSP', 'MCC', 'Originating_Channel', 'Txn_Subtype', 'Source'
 ]
 
 df_cbs_in = df_cbs_in[common_cols]
@@ -321,19 +345,40 @@ for c in ['Settlement_Charge', 'Amount_Settled']:
 settled = settled[settled_cols]
 
 # Write CBS
-_write(df_cbs_in, "cbs_inward.csv")
-_write(df_cbs_out, "cbs_outward.csv")
+_write(df_cbs_in, "cbs_inward.csv", SUBDIRS["cbs"])
+_write(df_cbs_out, "cbs_outward.csv", SUBDIRS["cbs"])
 
-# Write NPCI
-npci_in_name = f"cycle{CYCLE_NO:02d}_inward_{DATE_DDMMYYYY}_npci_inward.csv"
-npci_out_name = f"cycle{CYCLE_NO:02d}_outward_{DATE_DDMMYYYY}_npci_outward.csv"
-_write(npc_in, npci_in_name)
-_write(npc_out, npci_out_name)
+# Write NPCI in ISSR/ACQR naming with P2P/P2M and 10 cycles
+def chunk_df(df: pd.DataFrame, parts: int):
+    if df.empty:
+        return [df.copy() for _ in range(parts)]
+    shuffled = df.sample(frac=1.0, random_state=SEED).reset_index(drop=True)
+    indices = np.array_split(shuffled.index, parts)
+    return [shuffled.loc[idx].reset_index(drop=True) for idx in indices]
 
-# Write NTSL
-ntsl_dir = "inward" if DIRECTION.upper().startswith("IN") else "outward"
-ntsl_name = f"cycle{CYCLE_NO:02d}_{ntsl_dir}_{DATE_DDMMYYYY}_ntsl.csv"
-_write(settled, ntsl_name)
+npc_in_p2p = npc_in[npc_in['Txn_Subtype'] == 'P2P'].copy()
+npc_in_p2m = npc_in[npc_in['Txn_Subtype'] == 'P2M'].copy()
+npc_out_p2p = npc_out[npc_out['Txn_Subtype'] == 'P2P'].copy()
+npc_out_p2m = npc_out[npc_out['Txn_Subtype'] == 'P2M'].copy()
+
+in_p2p_chunks = chunk_df(npc_in_p2p, 10)
+in_p2m_chunks = chunk_df(npc_in_p2m, 10)
+out_p2p_chunks = chunk_df(npc_out_p2p, 10)
+out_p2m_chunks = chunk_df(npc_out_p2m, 10)
+
+for idx in range(10):
+    cyc = f"{idx+1}C"
+    _write(in_p2p_chunks[idx], f"ISSRP2P{ISSR_BANK}{DATE_DDMMYY}_{cyc}.csv", SUBDIRS["npci_in_p2p"])
+    _write(in_p2m_chunks[idx], f"ISSRP2M{ISSR_BANK}{DATE_DDMMYY}_{cyc}.csv", SUBDIRS["npci_in_p2m"])
+    _write(out_p2p_chunks[idx], f"ACQRP2P{ACQR_BANK}{DATE_DDMMYY}_{cyc}.csv", SUBDIRS["npci_out_p2p"])
+    _write(out_p2m_chunks[idx], f"ACQRP2M{ACQR_BANK}{DATE_DDMMYY}_{cyc}.csv", SUBDIRS["npci_out_p2m"])
+
+# Write NTSL (10 cycles, cycle optional in validation)
+ntsl_chunks = chunk_df(settled, 10)
+for idx in range(10):
+    cyc = f"{idx+1}C"
+    ntsl_name = f"UPINTSLP{ACQR_BANK}{DATE_DDMMYYYY}_{cyc}.csv"
+    _write(ntsl_chunks[idx], ntsl_name, SUBDIRS["ntsl"])
 
 # -------------------------------------------------
 # ADJUSTMENT.CSV - APPLY DURING RECON
@@ -400,9 +445,20 @@ for i, rrn in enumerate(failed_rrns[5:8]):  # Adjust 3 more with amount correcti
         'Payee PSP': rec['Payee_PSP']
     })
 
-adj_dir = "inward" if DIRECTION.upper().startswith("IN") else "outward"
-adj_name = f"cycle{CYCLE_NO:02d}_{adj_dir}_{DATE_DDMMYYYY}_adjustment.csv"
-pd.DataFrame(adjustments).to_csv(OUTPUT_DIR / adj_name, index=False)
+adj_name = f"UPIADJReportP{ACQR_BANK}{DATE_DDMMYY}.csv"
+pd.DataFrame(adjustments).to_csv(OUTPUT_DIR / SUBDIRS["adjustment"] / adj_name, index=False)
+
+# Write DRC report (minimal)
+drc_rows = []
+for i, rrn in enumerate(failed_rrns[:5]):
+    drc_rows.append({
+        "RRN": rrn,
+        "Reason": "DRC",
+        "Amount": float(master[master['RRN'] == rrn].iloc[0]['Amount']),
+        "Date": CYCLE_DATE
+    })
+drc_name = f"DRCReport{ACQR_BANK}{DATE_DDMMYY}.csv"
+pd.DataFrame(drc_rows).to_csv(OUTPUT_DIR / SUBDIRS["drc"] / drc_name, index=False)
 
 # -------------------------------------------------
 # FINAL CHECKS
@@ -413,5 +469,7 @@ assert non_empty_rrns.is_unique, "Duplicate non-empty RRNs detected in Switch fi
 
 print("\nNPCI/UPI compliant mock files generated with realistic exception scenarios")
 print("Output directory:", os.path.abspath(OUTPUT_DIR))
-for f in sorted(Path(OUTPUT_DIR).glob("*")):
-    print(" -", f.name)
+for f in sorted(Path(OUTPUT_DIR).rglob("*")):
+    if f.is_file():
+        rel = f.relative_to(OUTPUT_DIR)
+        print(" -", str(rel))

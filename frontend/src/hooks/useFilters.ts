@@ -92,10 +92,37 @@ export const useFilters = (
   const filteredHistorical = useMemo(() => {
     if (!historicalData.length) return [];
 
+    const parseDate = (value: string): Date | null => {
+      if (!value) return null;
+      if (value.length === 7) {
+        // YYYY-MM
+        return new Date(`${value}-01`);
+      }
+      if (value.length === 10) {
+        // YYYY-MM-DD
+        return new Date(value);
+      }
+      const dt = new Date(value);
+      return isNaN(dt.getTime()) ? null : dt;
+    };
+
+    const fromDate = parseDate(filters.dateFrom);
+    const toDate = parseDate(filters.dateTo);
+
     return historicalData.filter(item => {
-      // Date filter
-      if (filters.dateFrom && item.month < filters.dateFrom) return false;
-      if (filters.dateTo && item.month > filters.dateTo) return false;
+      // Date filter (handle monthly buckets)
+      if (fromDate || toDate) {
+        if (item.month.length === 7) {
+          const monthStart = new Date(`${item.month}-01`);
+          const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+          if (fromDate && monthEnd < fromDate) return false;
+          if (toDate && monthStart > toDate) return false;
+        } else {
+          const itemDate = parseDate(item.month);
+          if (fromDate && itemDate && itemDate < fromDate) return false;
+          if (toDate && itemDate && itemDate > toDate) return false;
+        }
+      }
 
       // Amount filter (using allTxns as proxy for amount)
       if (filters.amountMin && item.allTxns < parseInt(filters.amountMin)) return false;

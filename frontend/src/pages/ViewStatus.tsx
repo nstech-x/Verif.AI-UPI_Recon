@@ -20,6 +20,9 @@ export default function ViewStatus() {
   const [selectedError, setSelectedError] = useState<any>(null);
   const [metadata, setMetadata] = useState<any>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [validationSummary, setValidationSummary] = useState<any[]>([]);
+  const [validationDetails, setValidationDetails] = useState<any[]>([]);
+  const [rollbackedFiles, setRollbackedFiles] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchUploadStatus();
@@ -44,10 +47,19 @@ export default function ViewStatus() {
         // Show empty state with proper structure
         setUploadStatusData(transformRawDataToUploadStatus({}));
       }
+
+      // Validation summary (counts)
+      try {
+        const validation = await apiClient.getUploadValidation(metadata?.run_id);
+        setValidationSummary(validation?.summary || []);
+      } catch (err) {
+        setValidationSummary([]);
+      }
     } catch (error: any) {
       console.error("Error fetching upload status:", error);
       // Show empty state
       setUploadStatusData(transformRawDataToUploadStatus({}));
+      setValidationSummary([]);
     } finally {
       setLoading(false);
     }
@@ -120,9 +132,17 @@ export default function ViewStatus() {
     ];
   };
 
-  const handleViewError = (errorDetails: any) => {
-    setSelectedError(errorDetails);
-    setErrorDialogOpen(true);
+  const handleViewError = async (key: string) => {
+    try {
+      const detail = await apiClient.getUploadValidationDetail(key, metadata?.run_id);
+      setValidationDetails(detail?.details || []);
+      setSelectedError(detail);
+      setErrorDialogOpen(true);
+    } catch (err) {
+      setValidationDetails([]);
+      setSelectedError({ message: "Failed to load validation detail." });
+      setErrorDialogOpen(true);
+    }
   };
   const requiredUploaded =
     uploadStatusData[0]?.files?.filter((f: any) => f.required).every((f: any) => f.success > 0) ?? false;
@@ -244,87 +264,55 @@ export default function ViewStatus() {
             </div>
           ) : null}
           <div className="space-y-6">
-            {uploadStatusData.map((section, idx) => (
-              <div key={idx} className="space-y-3">
-                <h3 className="font-semibold text-brand-blue">{section.section}</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[32%]">File Type</TableHead>
-                      <TableHead className="text-center w-[10%]">Required</TableHead>
-                      <TableHead className="text-center w-[10%]">Uploaded</TableHead>
-                      <TableHead className="text-center w-[10%]">Success</TableHead>
-                      <TableHead className="text-center w-[10%]">Error</TableHead>
-                      <TableHead className="w-[20%]">Latest Files</TableHead>
-                      <TableHead className="text-center w-[8%]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {section.files.map((file, fileIdx) => (
-                      <TableRow key={fileIdx}>
-                        <TableCell className="font-medium">{file.name}</TableCell>
-                        <TableCell className="text-center">
-                          {file.required ? "Yes" : "Optional"}
-                        </TableCell>
-                        <TableCell className="text-center">{file.uploaded}</TableCell>
-                        <TableCell className="text-center">
-                          {file.success > 0 ? (
-                            <div className="flex justify-center">
-                              <Badge variant="default" className="bg-green-600 text-white">
-                                {file.success}
-                              </Badge>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {file.error > 0 ? (
-                            <div className="flex justify-center">
-                              <Badge variant="destructive">{file.error}</Badge>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {file.filenames && file.filenames.length > 0 ? (
-                            <div className="space-y-1">
-                              {file.filenames.slice(0, 3).map((name: string) => (
-                                <div key={name} className="text-xs text-muted-foreground truncate">
-                                  {name}
-                                </div>
-                              ))}
-                              {file.filenames.length > 3 ? (
-                                <div className="text-xs text-muted-foreground">+{file.filenames.length - 3} more</div>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">No files</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center">
-                          {file.error > 0 ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-2"
-                              onClick={() => handleViewError(file.errorDetails || { message: "File upload failed. Please try again." })}
-                            >
-                              <Eye className="w-4 h-4" />
-                              View Error
-                            </Button>
-                          ) : (
-                            <span className="text-muted-foreground">-</span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+            {validationSummary.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-6 text-sm text-muted-foreground">
+                No validation summary available.
               </div>
-              ))}
-            </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>File Type</TableHead>
+                    <TableHead className="text-center">Required</TableHead>
+                    <TableHead className="text-center">Uploaded</TableHead>
+                    <TableHead className="text-center">Error</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {validationSummary.map((row) => (
+                    <TableRow key={row.key}>
+                      <TableCell className="font-medium">{row.key}</TableCell>
+                      <TableCell className="text-center">{row.required_count}</TableCell>
+                      <TableCell className="text-center">{row.uploaded_count}</TableCell>
+                      <TableCell className="text-center">
+                        {row.error ? (
+                          <Badge variant="destructive">Error</Badge>
+                        ) : (
+                          <Badge variant="default" className="bg-green-600 text-white">OK</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.error ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => handleViewError(row.key)}
+                          >
+                            <Eye className="w-4 h-4" />
+                            View Error
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -338,24 +326,66 @@ export default function ViewStatus() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm font-semibold text-red-900 mb-2">Error Message:</p>
-              <p className="text-sm text-red-800">
-                {selectedError?.message || "An error occurred during file upload"}
-              </p>
-            </div>
-            {selectedError?.details && (
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="text-sm font-semibold mb-2">Additional Details:</p>
-                <pre className="text-xs whitespace-pre-wrap">
-                  {JSON.stringify(selectedError.details, null, 2)}
-                </pre>
+            {validationDetails.length === 0 ? (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">
+                  {selectedError?.message || "No validation details found."}
+                </p>
               </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>File Name</TableHead>
+                    <TableHead className="text-center">Required Rows</TableHead>
+                    <TableHead className="text-center">Uploaded Rows</TableHead>
+                    <TableHead className="text-center">Uploaded By</TableHead>
+                    <TableHead className="text-center">Action</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {validationDetails.map((detail) => (
+                    <TableRow key={detail.file_name}>
+                      <TableCell className="font-medium">{detail.file_name}</TableCell>
+                      <TableCell className="text-center">{detail.required_rows ?? "-"}</TableCell>
+                      <TableCell className="text-center">{detail.uploaded_rows ?? "-"}</TableCell>
+                      <TableCell className="text-center">{detail.uploaded_by || "AUTO"}</TableCell>
+                      <TableCell className="text-center">
+                        {!rollbackedFiles.has(detail.file_name) ? (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={async () => {
+                              try {
+                                await apiClient.rollbackIngestion(metadata?.run_id, detail.file_name);
+                                const next = new Set(rollbackedFiles);
+                                next.add(detail.file_name);
+                                setRollbackedFiles(next);
+                              } catch (err) {
+                                console.error("Rollback failed", err);
+                              }
+                            }}
+                          >
+                            Rollback
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              window.location.href = "/file-upload";
+                            }}
+                          >
+                            Re-upload
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
-            <Button
-              className="w-full"
-              onClick={() => setErrorDialogOpen(false)}
-            >
+            <Button className="w-full" onClick={() => setErrorDialogOpen(false)}>
               Close
             </Button>
           </div>

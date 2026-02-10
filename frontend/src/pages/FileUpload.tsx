@@ -1,28 +1,25 @@
 import { useState } from "react";
 import { Card, CardContent } from "../components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Upload, Loader2, CheckCircle } from "lucide-react";
+import { Loader2, CheckCircle } from "lucide-react";
 import { useToast } from "../hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "../lib/api";
 import { useDemoData } from "../contexts/DemoDataContext";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 export default function FileUpload() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { triggerDemoData } = useDemoData();
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const { setDemoMode } = useDemoData();
+  const [date] = useState(new Date().toISOString().split('T')[0]);
   const [cbsInward, setCbsInward] = useState<File | null>(null);
   const [cbsOutward, setCbsOutward] = useState<File | null>(null);
   const [cbsBalance, setCbsBalance] = useState("");
-  const [cbsBalanceInput, setCbsBalanceInput] = useState("");
   const [switchFile, setSwitchFile] = useState<File | null>(null);
   const [npciFiles, setNpciFiles] = useState<Record<string, File[]>>({});
-  const [currentStep, setCurrentStep] = useState("cbs");
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -35,15 +32,27 @@ export default function FileUpload() {
         cbs_inward: cbsInward,
         cbs_outward: cbsOutward,
         switch: switchFile,
-        cbs_balance: cbsBalance || cbsBalanceInput,
+        cbs_balance: cbsBalance,
         transaction_date: date,
       };
 
       // Add optional NPCI files only if they were selected
-      if (npciFiles.npci_inward?.length) uploadData.npci_inward = npciFiles.npci_inward;
-      if (npciFiles.npci_outward?.length) uploadData.npci_outward = npciFiles.npci_outward;
+      const npciInward = [
+        ...(npciFiles.npci_inward_p2p || []),
+        ...(npciFiles.npci_inward_p2m || []),
+      ];
+      const npciOutward = [
+        ...(npciFiles.npci_outward_p2p || []),
+        ...(npciFiles.npci_outward_p2m || []),
+      ];
+      if (npciInward.length) uploadData.npci_inward = npciInward;
+      if (npciOutward.length) uploadData.npci_outward = npciOutward;
       if (npciFiles.ntsl?.length) uploadData.ntsl = npciFiles.ntsl;
-      if (npciFiles.adjustment?.length) uploadData.adjustment = npciFiles.adjustment;
+      const adjustmentFiles = [
+        ...(npciFiles.adjustment || []),
+        ...(npciFiles.drc || []),
+      ];
+      if (adjustmentFiles.length) uploadData.adjustment = adjustmentFiles;
 
       const uploadResult = await apiClient.uploadFiles(uploadData);
 
@@ -58,12 +67,12 @@ export default function FileUpload() {
         .map(f => f.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()))
         .join(", ");
 
-      // Trigger demo data when files are uploaded successfully
-      triggerDemoData();
+      // Ensure real-time data is shown after upload
+      setDemoMode(false);
 
       toast({
         title: "Files uploaded successfully",
-        description: `Run ID: ${data.run_id}. Uploaded: ${fileNames}. Demo data is now available.`,
+        description: `Run ID: ${data.run_id}. Uploaded: ${fileNames}.`,
       });
 
       // Dispatch event to refresh dashboard
@@ -103,72 +112,93 @@ export default function FileUpload() {
     const accepted: File[] = [];
 
     const validateFilename = (file: File): boolean => {
-      const name = (file.name || "").toLowerCase();
-      const cycleMatch = name.match(/cycle\s*0*(\d{1,2})/);
-      const typeMatch = name.match(/(?:^|[_-])(inward|outward)(?:[_-]|$)/);
-      const dateMatch = name.match(/(\d{2})(\d{2})(\d{4})/);
+      const name = (file.name || "").toUpperCase();
 
-      if (!cycleMatch || !typeMatch || !dateMatch) {
-        toast({
-          title: "Invalid filename",
-          description: "Filename must follow pattern cycle<no>_(inward|outward)_DDMMYYYY[_suffix]. File rejected.",
-          variant: "destructive",
-        });
-        return false;
+      const npciMatch = name.match(/^(ISSR|ACQR)(P2P|P2M)[A-Z0-9]{4}(\d{6})_(\d{1,2})C\./);
+      const ntslMatch = name.match(/^UPINTSLP[A-Z0-9]{4}(\d{8})(?:_(\d{1,2})C)?\./);
+      const adjMatch = name.match(/^UPIADJREPORTP[A-Z0-9]{4}(\d{6})\./);
+      const drcMatch = name.match(/^DRCREPORT[A-Z0-9]{4}(\d{6})\./);
+
+      if (fileType.startsWith('npci_')) {
+        if (!npciMatch) {
+          toast({
+            title: "Invalid filename",
+            description: "NPCI filename must follow ISSR/ACQR + P2P/P2M + BANK + DDMMYY + _<cycle>C.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        const direction = npciMatch[1];
+        const txnType = npciMatch[2];
+        if (fileType.includes('inward') && direction !== 'ISSR') {
+          toast({
+            title: "Invalid file direction",
+            description: "NPCI inward files must start with ISSR.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        if (fileType.includes('outward') && direction !== 'ACQR') {
+          toast({
+            title: "Invalid file direction",
+            description: "NPCI outward files must start with ACQR.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        if (fileType.includes('p2p') && txnType !== 'P2P') {
+          toast({
+            title: "Invalid transaction type",
+            description: "NPCI P2P files must include P2P.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        if (fileType.includes('p2m') && txnType !== 'P2M') {
+          toast({
+            title: "Invalid transaction type",
+            description: "NPCI P2M files must include P2M.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
       }
 
-      const cycleNum = parseInt(cycleMatch[1], 10);
-      if (cycleNum < 1 || cycleNum > 10) {
-        toast({
-          title: "Invalid cycle number",
-          description: "Cycle number in filename must be between 1 and 10. File rejected.",
-          variant: "destructive",
-        });
-        return false;
+      if (fileType === 'ntsl') {
+        if (!ntslMatch) {
+          toast({
+            title: "Invalid filename",
+            description: "NTSL filename must follow UPINTSLP + BANK + DDMMYYYY (_<cycle>C optional).",
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
       }
 
-      const dd = parseInt(dateMatch[1], 10);
-      const mm = parseInt(dateMatch[2], 10);
-      const yyyy = parseInt(dateMatch[3], 10);
-
-      const parsedDate = new Date(yyyy, mm - 1, dd);
-      const isValidDate = parsedDate.getDate() === dd && parsedDate.getMonth() === mm - 1 && parsedDate.getFullYear() === yyyy;
-      if (!isValidDate) {
-        toast({
-          title: "Invalid file date",
-          description: `The date in file name (${String(dd).padStart(2, '0')}-${String(mm).padStart(2, '0')}-${yyyy}) is not a valid date. File rejected.`,
-          variant: "destructive",
-        });
-        return false;
+      if (fileType === 'adjustment') {
+        if (!adjMatch) {
+          toast({
+            title: "Invalid filename",
+            description: "Adjustment filename must follow UPIADJReportP + BANK + DDMMYY.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
       }
 
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      if (parsedDate.getTime() !== today.getTime()) {
-        toast({
-          title: "Invalid file date",
-          description: `The date in file name (${String(dd).padStart(2, '0')}-${String(mm).padStart(2, '0')}-${yyyy}) must be today's date. File rejected.`,
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      if (fileType === 'npci_inward' && typeMatch[1] !== 'inward') {
-        toast({
-          title: "Invalid file direction",
-          description: "NPCI inward files must include 'inward' in the filename. File rejected.",
-          variant: "destructive",
-        });
-        return false;
-      }
-
-      if (fileType === 'npci_outward' && typeMatch[1] !== 'outward') {
-        toast({
-          title: "Invalid file direction",
-          description: "NPCI outward files must include 'outward' in the filename. File rejected.",
-          variant: "destructive",
-        });
-        return false;
+      if (fileType === 'drc') {
+        if (!drcMatch) {
+          toast({
+            title: "Invalid filename",
+            description: "DRC filename must follow DRCReport + BANK + DDMMYY.",
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
       }
 
       return true;
@@ -188,22 +218,6 @@ export default function FileUpload() {
     }));
   };
 
-  const handleNextStep = () => {
-    if (currentStep === "cbs" && (!cbsInward || !cbsOutward || !switchFile)) {
-      toast({
-        title: "Required files missing",
-        description: "Please select CBS Inward, CBS Outward and Switch files to proceed.",
-        variant: "destructive",
-      });
-      return;
-    }
-    setCurrentStep("npci");
-  };
-
-  const handlePreviousStep = () => {
-    setCurrentStep("cbs");
-  };
-
   const isUploading = uploadMutation.isPending;
 
   return (
@@ -216,367 +230,223 @@ export default function FileUpload() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Reconciliation Console</p>
             <h1 className="mt-2 text-3xl font-bold text-foreground md:text-4xl">File Upload</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {currentStep === "cbs" && "Step 1 of 2: Upload CBS, GL and Switch files."}
-              {currentStep === "npci" && "Step 2 of 2: Upload NPCI files (optional)."}
+              Upload CBS, Switch, NPCI, NTSL, Adjustment, and DRC files for reconciliation.
             </p>
-          </div>
-          <div className="flex items-center gap-3 rounded-full border bg-white/80 px-4 py-2 text-xs font-semibold text-slate-600 shadow-sm">
-            <span className={`rounded-full px-3 py-1 ${currentStep === "cbs" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>CBS / GL / Switch</span>
-            <span className={`rounded-full px-3 py-1 ${currentStep === "npci" ? "bg-slate-900 text-white" : "bg-slate-100"}`}>NPCI</span>
           </div>
         </div>
       </div>
 
-      <Tabs value={currentStep} onValueChange={setCurrentStep} className="w-full">
-        <TabsList className="bg-muted/20 rounded-full p-1">
-          <TabsTrigger
-            value="cbs"
-            className="rounded-full data-[state=active]:bg-slate-900 data-[state=active]:text-white"
-          >
-            CBS/ GL/ Switch
-          </TabsTrigger>
-          <TabsTrigger
-            value="npci"
-            className="rounded-full data-[state=active]:bg-slate-900 data-[state=active]:text-white"
-          >
-            NPCI Files
-          </TabsTrigger>
-        </TabsList>
-       
-        {/* CBS/GL File Tab */}
-        <TabsContent value="cbs">
-          <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-            <div className="space-y-6">
-              <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground shadow-sm">
-                <p>Upload your CBS (Core Banking System) and GL (General Ledger) files for reconciliation.</p>
-                <p className="mt-2">All required files must be selected to proceed.</p>
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
+        <div className="space-y-6">
+          <div className="rounded-2xl border bg-white p-4 text-sm text-muted-foreground shadow-sm">
+            <p>Upload all reconciliation inputs from a single page. CBS Inward, CBS Outward, and Switch are required.</p>
+          </div>
+
+          <Card className="shadow-lg">
+            <CardContent className="pt-6">
+              <div className="overflow-hidden rounded-2xl border">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3">File Name</th>
+                      <th className="px-4 py-3">Browse</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    <tr>
+                      <td className="px-4 py-3 font-medium">CBS (Inward)</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('cbs-inward')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {cbsInward && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <CheckCircle className="h-3 w-3 text-emerald-500" />
+                            {cbsInward.name}
+                          </div>
+                        )}
+                        <input id="cbs-inward" type="file" className="hidden" accept=".csv,.xlsx" onChange={handleFileChange(setCbsInward)} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">CBS (Outward)</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('cbs-outward')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {cbsOutward && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <CheckCircle className="h-3 w-3 text-emerald-500" />
+                            {cbsOutward.name}
+                          </div>
+                        )}
+                        <input id="cbs-outward" type="file" className="hidden" accept=".csv,.xlsx" onChange={handleFileChange(setCbsOutward)} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">Switch</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('switch-file')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {switchFile && (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                            <CheckCircle className="h-3 w-3 text-emerald-500" />
+                            {switchFile.name}
+                          </div>
+                        )}
+                        <input id="switch-file" type="file" className="hidden" accept=".csv,.xlsx" onChange={handleFileChange(setSwitchFile)} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">NPCI Raw Inward (P2P)</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('npci-inward-p2p')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.npci_inward_p2p?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.npci_inward_p2p.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="npci-inward-p2p" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('npci_inward_p2p')} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">NPCI Raw Outward (P2P)</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('npci-outward-p2p')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.npci_outward_p2p?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.npci_outward_p2p.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="npci-outward-p2p" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('npci_outward_p2p')} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">NPCI Raw Inward (P2M)</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('npci-inward-p2m')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.npci_inward_p2m?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.npci_inward_p2m.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="npci-inward-p2m" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('npci_inward_p2m')} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">NPCI Raw Outward (P2M)</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('npci-outward-p2m')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.npci_outward_p2m?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.npci_outward_p2m.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="npci-outward-p2m" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('npci_outward_p2m')} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">NTSL</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('ntsl-file')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.ntsl?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.ntsl.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="ntsl-file" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('ntsl')} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">Adjustment File</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('adjustment-file')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.adjustment?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.adjustment.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="adjustment-file" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('adjustment')} />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="px-4 py-3 font-medium">DRC</td>
+                      <td className="px-4 py-3">
+                        <Button variant="link" className="px-0" onClick={() => document.getElementById('drc-file')?.click()} disabled={isUploading}>
+                          Browse
+                        </Button>
+                        {npciFiles.drc?.length ? (
+                          <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {npciFiles.drc.map((file) => (
+                              <div key={file.name} className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                {file.name}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                        <input id="drc-file" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('drc')} />
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
-              <Card className="shadow-lg">
-                <CardContent className="space-y-8 pt-8">
-                {/* CBS Inward File */}
-                <div className="space-y-2">
-                  <Label className="text-base font-semibold">
-                    Upload CBS Inward File <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">Required</span>
-                  </Label>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        variant="outline"
-                        className="rounded-full px-6"
-                        onClick={() => document.getElementById('cbs-inward')?.click()}
-                        disabled={isUploading}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Choose File
-                      </Button>
-                      <span className="text-xs text-muted-foreground">CSV, XLSX</span>
-                    </div>
-                    <input
-                      id="cbs-inward"
-                      type="file"
-                      className="hidden"
-                      accept=".csv,.xlsx"
-                      onChange={handleFileChange(setCbsInward)}
-                    />
-                    {cbsInward && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        <span className="text-sm text-muted-foreground">{cbsInward.name}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* CBS Outward File */}
-                <div className="space-y-2">
-                  <Label className="text-base font-semibold">
-                    Upload CBS Outward File <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">Required</span>
-                  </Label>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        variant="outline"
-                        className="rounded-full px-6"
-                        onClick={() => document.getElementById('cbs-outward')?.click()}
-                        disabled={isUploading}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Choose File
-                      </Button>
-                      <span className="text-xs text-muted-foreground">CSV, XLSX</span>
-                    </div>
-                    <input
-                      id="cbs-outward"
-                      type="file"
-                      className="hidden"
-                      accept=".csv,.xlsx"
-                      onChange={handleFileChange(setCbsOutward)}
-                    />
-                    {cbsOutward && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        <span className="text-sm text-muted-foreground">{cbsOutward.name}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* CBS Closing Balance */}
-                <div className="space-y-2">
+              <div className="mt-6 space-y-4">
+                <div>
                   <Label className="text-base font-semibold">Enter CBS Closing Balance</Label>
                   <Input
                     type="text"
                     value={cbsBalance}
                     onChange={(e) => setCbsBalance(e.target.value)}
                     placeholder="Enter closing balance"
-                    className="max-w-md rounded-xl"
+                    className="mt-2 max-w-md rounded-xl"
                   />
                 </div>
-
-                {/* Switch File (moved into CBS tab) */}
-                <div className="space-y-2">
-                  <Label className="text-base font-semibold">
-                    Upload Switch File <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">Required</span>
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Assumption is that the Inward & Outward Transactions are provided in a single file
-                  </p>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        variant="outline"
-                        className="rounded-full px-6"
-                        onClick={() => document.getElementById('switch-file')?.click()}
-                        disabled={isUploading}
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Choose File
-                      </Button>
-                      <span className="text-xs text-muted-foreground">CSV, XLSX</span>
-                    </div>
-                    <input
-                      id="switch-file"
-                      type="file"
-                      className="hidden"
-                      accept=".csv,.xlsx"
-                      onChange={handleFileChange(setSwitchFile)}
-                    />
-                    {switchFile && (
-                      <div className="mt-3 flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        <span className="text-sm text-muted-foreground">{switchFile.name}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button
-                    className="rounded-full px-12 py-6 text-lg bg-slate-900 hover:bg-slate-800 shadow-lg hover:shadow-xl transition-all"
-                    onClick={handleNextStep}
-                    disabled={isUploading || !cbsInward || !cbsOutward || !switchFile}
-                  >
-                    Next
-                  </Button>
-                </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-4">
-              <div className="rounded-2xl border bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Required</p>
-                <div className="mt-3 space-y-2 text-sm text-muted-foreground">
-                  <p>CBS Inward</p>
-                  <p>CBS Outward</p>
-                  <p>Switch File</p>
-                </div>
-              </div>
-              <div className="rounded-2xl border bg-slate-900 p-5 text-white shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">Tip</p>
-                <p className="mt-2 text-sm text-slate-200">
-                  Keep filenames consistent and ensure today's date is embedded for NPCI uploads.
-                </p>
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* NPCI Files Tab - Secondary / Fall-back Upload Mode */}
-        <TabsContent value="npci">
-          <div className="space-y-6 mt-6">
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-              <p className="text-sm text-amber-900">
-                <strong>Secondary / Fall-back Upload Mode:</strong> Use this section to upload NPCI files as an alternative or backup method. NPCI files are optional and support multiple cycles (1-10).
-              </p>
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 mb-6">
-              <p className="text-sm text-blue-900">
-                <strong>Note:</strong> NPCI files are optional. You can upload any combination of NPCI Inward, NPCI Outward, NTSL, and Adjustment files.
-              </p>
-            </div>
-            <div className="flex justify-end mb-2">
-              <Link to="/cycle-skip">
-                <Button variant="ghost" className="rounded-full">Open NPCI Cycle</Button>
-              </Link>
-            </div>
-            <Card className="shadow-lg">
-              <CardContent className="space-y-8 pt-8">
-                {/* NPCI Raw I/W File */}
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">NPCI Raw I/W File</Label>
-                  <div className="text-sm text-muted-foreground mb-1">Cycle will be auto-detected from filename or file content.</div>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <Button
-                      variant="outline"
-                      className="rounded-full px-6"
-                      onClick={() => document.getElementById('npci-inward')?.click()}
-                      disabled={isUploading}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Choose Files
-                    </Button>
-                    <span className="ml-3 text-xs text-muted-foreground">Multiple files supported</span>
-                  </div>
-                  <input
-                    id="npci-inward"
-                    type="file"
-                    className="hidden"
-                    accept=".csv,.xlsx"
-                    multiple
-                    onChange={handleNpciFileChange('npci_inward')}
-                  />
-                  {npciFiles.npci_inward?.length ? (
-                    <div className="mt-2 space-y-1">
-                      {npciFiles.npci_inward.map((file) => (
-                        <div key={file.name} className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-sm text-muted-foreground">{file.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* NPCI Raw O/W File */}
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">NPCI Raw O/W File</Label>
-                  <div className="text-sm text-muted-foreground mb-1">Cycle will be auto-detected from filename or file content.</div>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <Button
-                      variant="outline"
-                      className="rounded-full px-6"
-                      onClick={() => document.getElementById('npci-outward')?.click()}
-                      disabled={isUploading}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Choose Files
-                    </Button>
-                    <span className="ml-3 text-xs text-muted-foreground">Multiple files supported</span>
-                  </div>
-                  <input
-                    id="npci-outward"
-                    type="file"
-                    className="hidden"
-                    accept=".csv,.xlsx"
-                    multiple
-                    onChange={handleNpciFileChange('npci_outward')}
-                  />
-                  {npciFiles.npci_outward?.length ? (
-                    <div className="mt-2 space-y-1">
-                      {npciFiles.npci_outward.map((file) => (
-                        <div key={file.name} className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-sm text-muted-foreground">{file.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* NTSL File */}
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">NTSL File</Label>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Cycle for NTSL will be auto-detected from filename or file content.
-                  </div>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <Button
-                      variant="outline"
-                      className="rounded-full px-6"
-                      onClick={() => document.getElementById('ntsl-file')?.click()}
-                      disabled={isUploading}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Choose Files
-                    </Button>
-                    <span className="ml-3 text-xs text-muted-foreground">Multiple files supported</span>
-                  </div>
-                  <input
-                    id="ntsl-file"
-                    type="file"
-                    className="hidden"
-                    accept=".csv,.xlsx"
-                    multiple
-                    onChange={handleNpciFileChange('ntsl')}
-                  />
-                  {npciFiles.ntsl?.length ? (
-                    <div className="mt-2 space-y-1">
-                      {npciFiles.ntsl.map((file) => (
-                        <div key={file.name} className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-sm text-muted-foreground">{file.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* Adjustment File */}
-                <div className="space-y-3">
-                  <Label className="text-base font-semibold">Adjustment File</Label>
-                  <div className="rounded-2xl border border-dashed bg-slate-50 p-4">
-                    <Button
-                      variant="outline"
-                      className="rounded-full px-6"
-                      onClick={() => document.getElementById('adjustment-file')?.click()}
-                      disabled={isUploading}
-                    >
-                      <Upload className="w-4 h-4 mr-2" />
-                      Choose Files
-                    </Button>
-                    <span className="ml-3 text-xs text-muted-foreground">Multiple files supported</span>
-                  </div>
-                  <input
-                    id="adjustment-file"
-                    type="file"
-                    className="hidden"
-                    accept=".csv,.xlsx"
-                    multiple
-                    onChange={handleNpciFileChange('adjustment')}
-                  />
-                  {npciFiles.adjustment?.length ? (
-                    <div className="mt-2 space-y-1">
-                      {npciFiles.adjustment.map((file) => (
-                        <div key={file.name} className="flex items-center gap-2">
-                          <CheckCircle className="w-4 h-4 text-green-500" />
-                          <span className="text-sm text-muted-foreground">{file.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                <div className="flex justify-end pt-4">
-                  <Button
-                    variant="outline"
-                    className="rounded-full px-8 mr-2"
-                    onClick={handlePreviousStep}
-                    disabled={isUploading}
-                  >
-                    Back
-                  </Button>
+                <div className="flex justify-end">
                   <Button
                     className="rounded-full px-12 py-6 text-lg bg-slate-900 hover:bg-slate-800 shadow-lg hover:shadow-xl transition-all"
                     onClick={() => uploadMutation.mutate()}
@@ -592,11 +462,47 @@ export default function FileUpload() {
                     )}
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm">
+            <CardContent className="pt-6">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <p className="text-sm font-semibold">NPCI Cycle Skip</p>
+                  <p className="text-xs text-muted-foreground">
+                    Submit NPCI cycle skip requests with 1C–10C format.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => (window.location.href = "/cycle-skip")}
+                >
+                  Open NPCI Cycle Skip
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Required</p>
+            <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+              <p>CBS Inward</p>
+              <p>CBS Outward</p>
+              <p>Switch File</p>
+            </div>
           </div>
-        </TabsContent>
-      </Tabs>
+          <div className="rounded-2xl border bg-slate-900 p-5 text-white shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-200">Tip</p>
+            <p className="mt-2 text-sm text-slate-200">
+              NPCI filenames must include ISSR/ACQR, P2P/P2M, bank code, date, and cycle. NTSL cycle is optional.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
-}
+}

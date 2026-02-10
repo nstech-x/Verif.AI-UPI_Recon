@@ -22,7 +22,7 @@ export default function CycleSkip() {
     {
       id: "CS2026001",
       cycleDate: "2026-01-15",
-      cycleNumber: "C1",
+      cycleNumber: "1C",
       reason: "System Maintenance",
       status: "Approved",
       createdBy: "Admin",
@@ -33,7 +33,7 @@ export default function CycleSkip() {
     {
       id: "CS2026002",
       cycleDate: "2026-01-10",
-      cycleNumber: "C2",
+      cycleNumber: "2C",
       reason: "NPCI Scheduled Downtime",
       status: "Approved",
       createdBy: "Ops Team",
@@ -44,7 +44,7 @@ export default function CycleSkip() {
     {
       id: "CS2026003",
       cycleDate: "2026-01-08",
-      cycleNumber: "C3",
+      cycleNumber: "3C",
       reason: "File Processing Error",
       status: "Pending",
       createdBy: "Admin",
@@ -55,7 +55,7 @@ export default function CycleSkip() {
     {
       id: "CS2026004",
       cycleDate: "2026-01-05",
-      cycleNumber: "C1",
+      cycleNumber: "1C",
       reason: "Network Connectivity Issue",
       status: "Rejected",
       createdBy: "Ops Team",
@@ -165,13 +165,19 @@ export default function CycleSkip() {
                 <SelectTrigger>
                   <SelectValue placeholder="Select cycle" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="C1">C1 - Morning Settlement</SelectItem>
-                  <SelectItem value="C2">C2 - Afternoon Settlement</SelectItem>
-                  <SelectItem value="C3">C3 - Evening Settlement</SelectItem>
-                  <SelectItem value="C4">C4 - Night Settlement</SelectItem>
-                </SelectContent>
-              </Select>
+              <SelectContent>
+                <SelectItem value="1C">Cycle 1C</SelectItem>
+                <SelectItem value="2C">Cycle 2C</SelectItem>
+                <SelectItem value="3C">Cycle 3C</SelectItem>
+                <SelectItem value="4C">Cycle 4C</SelectItem>
+                <SelectItem value="5C">Cycle 5C</SelectItem>
+                <SelectItem value="6C">Cycle 6C</SelectItem>
+                <SelectItem value="7C">Cycle 7C</SelectItem>
+                <SelectItem value="8C">Cycle 8C</SelectItem>
+                <SelectItem value="9C">Cycle 9C</SelectItem>
+                <SelectItem value="10C">Cycle 10C</SelectItem>
+              </SelectContent>
+            </Select>
             </div>
 
             {/* Skip Reason */}

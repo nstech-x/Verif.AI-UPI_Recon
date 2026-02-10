@@ -9,9 +9,17 @@ import { DISPUTE_MASTER } from "../constants/disputeMaster";
 /**
  * Generate demo disputes across various stages and categories
  */
-export const generateDemoDisputes = (): Dispute[] => {
+export const generateDemoDisputes = (dateFrom?: string, dateTo?: string): Dispute[] => {
   const disputes: Dispute[] = [];
   const today = new Date();
+  const rangeStart = dateFrom ? new Date(dateFrom) : new Date(today);
+  const rangeEnd = dateTo ? new Date(dateTo) : new Date(today);
+  if (rangeEnd < rangeStart) {
+    const tmp = new Date(rangeStart);
+    rangeStart.setTime(rangeEnd.getTime());
+    rangeEnd.setTime(tmp.getTime());
+  }
+  const rangeDays = Math.max(1, Math.floor((rangeEnd.getTime() - rangeStart.getTime()) / (1000 * 60 * 60 * 24)) + 1);
   
   // Generate 50 disputes with varied characteristics
   for (let i = 0; i < 50; i++) {
@@ -23,21 +31,21 @@ export const generateDemoDisputes = (): Dispute[] => {
     const stageCode = stages[Math.floor(Math.random() * stages.length)];
     
     // Generate dates
-    const daysAgo = Math.floor(Math.random() * 90);
-    const createdDate = new Date(today);
-    createdDate.setDate(createdDate.getDate() - daysAgo);
+    const offsetDays = Math.floor(Math.random() * rangeDays);
+    const createdDate = new Date(rangeStart);
+    createdDate.setDate(createdDate.getDate() + offsetDays);
     
     const updatedDate = new Date(createdDate);
-    updatedDate.setDate(updatedDate.getDate() + Math.floor(Math.random() * daysAgo));
+    updatedDate.setDate(updatedDate.getDate() + Math.floor(Math.random() * Math.max(1, rangeDays - offsetDays)));
     
     // Generate transaction details
     const txnDate = new Date(createdDate);
-    txnDate.setDate(txnDate.getDate() - Math.floor(Math.random() * 30));
+    txnDate.setDate(txnDate.getDate() - Math.floor(Math.random() * Math.min(30, rangeDays)));
     
     const amount = 500 + Math.random() * 49500;
     
     disputes.push({
-      disputeId: `DIS${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(1000 + i).slice(-4)}`,
+      disputeId: `DIS${createdDate.getFullYear()}${String(createdDate.getMonth() + 1).padStart(2, '0')}${String(1000 + i).slice(-4)}`,
       txnSubtype: masterEntry.txnSubtype,
       disputeCategory: masterEntry.category,
       stageCode: stageCode,

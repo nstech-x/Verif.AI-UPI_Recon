@@ -1,0 +1,13 @@
+{
+  "required_counts": {
+    "cbs_inward": 1,
+    "cbs_outward": 1,
+    "switch": 1,
+    "npci_inward_p2p": 10,
+    "npci_outward_p2p": 10,
+    "npci_inward_p2m": 10,
+    "npci_outward_p2m": 10,
+    "ntsl": 10
+  },
+  "required_rows": {}
+}

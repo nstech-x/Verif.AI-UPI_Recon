@@ -14,6 +14,22 @@ from config import OUTPUT_DIR, UPLOAD_DIR
 from core.security import get_current_user
 from dependencies import audit, file_handler
 from services.ttum import get_ttum_files, write_ttum_csv, write_ttum_xlsx
+from services.report_catalog import (
+    resolve_run_id,
+    generate_listing_report,
+    generate_matched_transactions_report,
+    generate_unmatched_transactions_report,
+    generate_adjustment_listing,
+    generate_ttum_listing,
+    generate_annexure_iv_split,
+    generate_mis_report,
+    generate_datewise_income_expense,
+    generate_monthly_settlement_report,
+    generate_ntsl_settlement_ttum,
+    generate_dispute_tracker,
+    generate_rbi_reporting,
+    find_gl_statement,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -662,6 +678,94 @@ async def download_matched_csv(user: dict = Depends(get_current_user), run_id: O
     except Exception as e:
         logger.error(f"Matched CSV download error: {e}")
         raise HTTPException(status_code=500, detail="Failed to download matched CSV")
+
+
+@router.get("/download/{report_key}")
+async def download_report_by_key(
+    report_key: str,
+    user: dict = Depends(get_current_user),
+    run_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    period: Optional[str] = None,
+):
+    """Download report by a stable report key used by the frontend."""
+    try:
+        target = resolve_run_id(run_id)
+        path = None
+
+        if report_key == "cbs_beneficiary_listing":
+            path = generate_listing_report(target, "cbs_inward", direction="INWARD")
+        elif report_key == "cbs_remitter_listing":
+            path = generate_listing_report(target, "cbs_outward", direction="OUTWARD")
+        elif report_key == "switch_listing_inward":
+            path = generate_listing_report(target, "switch", direction="INWARD")
+        elif report_key == "switch_listing_outward":
+            path = generate_listing_report(target, "switch", direction="OUTWARD")
+        elif report_key == "npci_beneficiary_listing":
+            path = generate_listing_report(target, "npci_inward", direction="INWARD")
+        elif report_key == "npci_remitter_listing":
+            path = generate_listing_report(target, "npci_outward", direction="OUTWARD")
+        elif report_key == "adjustment_report_listing":
+            path = generate_adjustment_listing(target)
+        elif report_key == "matched_transactions":
+            path = generate_matched_transactions_report(target)
+        elif report_key == "unmatched_transactions":
+            path = generate_unmatched_transactions_report(target)
+        elif report_key == "ttum_receivable_inward":
+            path = generate_ttum_listing(target, "INWARD")
+        elif report_key == "ttum_payable_outward":
+            path = generate_ttum_listing(target, "OUTWARD")
+        elif report_key == "switch_status_update":
+            # Prefer generated switch update file in reports dir
+            candidate = os.path.join(OUTPUT_DIR, target, "reports", "Switch_Update_File.csv")
+            if os.path.exists(candidate):
+                path = candidate
+        elif report_key == "annexure_iv_tcc_ret":
+            outputs = generate_annexure_iv_split(target)
+            path = outputs.get("tcc_ret")
+        elif report_key == "annexure_iv_drc_rrc":
+            outputs = generate_annexure_iv_split(target)
+            path = outputs.get("drc_rrc")
+        elif report_key == "adjustment_report":
+            candidate = os.path.join(OUTPUT_DIR, target, "reports", "ANNEXURE_III.csv")
+            if os.path.exists(candidate):
+                path = candidate
+        elif report_key == "gl_justification":
+            path = find_gl_statement(target)
+        elif report_key == "mis_daily":
+            path = generate_mis_report(target, "daily", date_from, date_to)
+        elif report_key == "mis_weekly":
+            path = generate_mis_report(target, "weekly", date_from, date_to)
+        elif report_key == "mis_monthly":
+            path = generate_mis_report(target, "monthly", date_from, date_to)
+        elif report_key == "income_expense_datewise":
+            path = generate_datewise_income_expense(target, date_from, date_to)
+        elif report_key == "monthly_settlement_ntsl":
+            path = generate_monthly_settlement_report(target)
+        elif report_key == "ntsl_settlement_ttum_sponsor":
+            path = generate_ntsl_settlement_ttum(target, "sponsor")
+        elif report_key == "ntsl_settlement_ttum_submember":
+            path = generate_ntsl_settlement_ttum(target, "submember")
+        elif report_key == "dispute_tracker":
+            path = generate_dispute_tracker(target)
+        elif report_key == "rbi_reporting":
+            path = generate_rbi_reporting(target)
+
+        if not path or not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"Report '{report_key}' not found")
+
+        media_type = "text/csv"
+        if path.endswith(".xlsx"):
+            media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        return FileResponse(path, media_type=media_type, filename=os.path.basename(path))
+    except HTTPException:
+        raise
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Download report by key error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to download report")
 
 
 @router.get("/{report_type:path}")

@@ -1,7 +1,9 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 
 // API Base Configuration
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://verif-ai.onrender.com";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? "http://localhost:8000" : "https://verif-ai.onrender.com");
 
 // Create axios instance with default config
 const api: AxiosInstance = axios.create({
@@ -323,6 +325,20 @@ export const apiClient = {
     return response.data;
   },
 
+  getUploadValidation: async (runId?: string): Promise<any> => {
+    const response: AxiosResponse<any> = await api.get('/api/v1/upload/validation', {
+      params: runId ? { run_id: runId } : {},
+    });
+    return response.data;
+  },
+
+  getUploadValidationDetail: async (key: string, runId?: string): Promise<any> => {
+    const response: AxiosResponse<any> = await api.get('/api/v1/upload/validation/detail', {
+      params: { key, ...(runId ? { run_id: runId } : {}) },
+    });
+    return response.data;
+  },
+
   // File Downloads
   downloadLatestReport: async (): Promise<AxiosResponse<Blob>> => {
     const response: AxiosResponse<Blob> = await api.get('/api/v1/recon/latest/report', {
@@ -338,8 +354,9 @@ export const apiClient = {
     return response;
   },
 
-  downloadReport: async (endpoint: string): Promise<AxiosResponse<Blob>> => {
+  downloadReport: async (endpoint: string, params?: Record<string, any>): Promise<AxiosResponse<Blob>> => {
     const response: AxiosResponse<Blob> = await api.get(`/api/v1/reports/${endpoint}`, {
+      params,
       responseType: 'blob',
     });
     return response;

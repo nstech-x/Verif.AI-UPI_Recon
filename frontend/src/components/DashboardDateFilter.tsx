@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Calendar, RefreshCw } from "lucide-react";
 import { Button } from "./ui/button";
@@ -17,17 +17,25 @@ export default function DashboardDateFilter({
   const [quickFilter, setQuickFilter] = useState("today");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const hasInitialized = useRef(false);
+  const onDateChangeRef = useRef<typeof onDateChange>(onDateChange);
+
+  useEffect(() => {
+    onDateChangeRef.current = onDateChange;
+  }, [onDateChange]);
 
   // Set default dates to today
   useEffect(() => {
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
     const today = new Date().toISOString().split('T')[0];
     setDateFrom(today);
     setDateTo(today);
     // Notify parent of initial date range so embedded modules receive dates
-    if (onDateChange) {
-      onDateChange(today, today);
+    if (onDateChangeRef.current) {
+      onDateChangeRef.current(today, today);
     }
-  }, [onDateChange]);
+  }, []);
 
   const handleDateChange = (from: string, to: string) => {
     setDateFrom(from);

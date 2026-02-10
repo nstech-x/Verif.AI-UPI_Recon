@@ -3,6 +3,7 @@ import pandas as pd
 from typing import Dict, List
 from config import UPLOAD_DIR, OUTPUT_DIR, RUN_ID_FORMAT
 from services.logging_config import get_logger
+from services.file_naming import parse_upi_filename
 
 logger = get_logger(__name__)
 
@@ -11,7 +12,7 @@ class FileHandler:
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         os.makedirs(OUTPUT_DIR, exist_ok=True)
     
-    def save_uploaded_files(self, files: Dict, run_id: str, cycle: str = None, direction: str = None, run_date: str = None, per_file_cycles: Dict[str, str] = None) -> str:
+    def save_uploaded_files(self, files: Dict, run_id: str, cycle: str = None, direction: str = None, run_date: str = None, per_file_cycles: Dict[str, str] = None, uploaded_by: str = "AUTO") -> str:
         """Save uploaded files to timestamped folder with standardized naming - Windows compatible
         Supports cycle subfolders and direction metadata. Returns run_folder path.
         """
@@ -81,13 +82,18 @@ class FileHandler:
                         saved_files[file_type] = existing
                     else:
                         saved_files[file_type] = [existing, os.path.basename(file_path)]
+                    parsed = parse_upi_filename(filename) or {}
+                    row_count = self._count_rows(file_path)
                     file_metadata[filename] = {
                         'standardized_name': os.path.basename(file_path),
                         'file_type': file_type,
                         'original_name': filename,
                         'file_size': len(file_content),
                         'saved_at': os.path.getctime(file_path),
-                        'legacy_path': file_path
+                        'legacy_path': file_path,
+                        'uploaded_by': uploaded_by or 'AUTO',
+                        'row_count': row_count,
+                        'parsed': parsed,
                     }
                     logger.info(f"✅ Saved file: {standardized_name} (original: {filename}, type: {file_type})")
                 else:
@@ -105,7 +111,9 @@ class FileHandler:
             'cycle_id': cycle_id if cycle_id else cycle,
             'direction': direction,
             'run_date': run_date,
-            'saved_files': saved_files
+            'saved_files': saved_files,
+            'files_detail': file_metadata,
+            'uploaded_by': uploaded_by or 'AUTO',
         }
         self._save_file_metadata(run_folder, saved_files, file_metadata)
         # also write top-level metadata.json in the run root (not cycle subfolder)
@@ -117,47 +125,47 @@ class FileHandler:
         except Exception:
             pass
 
-        # ALSO store files in new structured layout: uploads/{filename}/[Inward|Outward]/ or uploads/{filename}/Cycles/{CycleN}/{Inward|Outward}/
+        # ALSO store files in structured layout inside run_id folder
         for filename, file_content in files.items():
             try:
-                base_name = os.path.splitext(filename)[0]
-                per_cycle = None
-                if per_file_cycles and filename in per_file_cycles:
-                    per_cycle = per_file_cycles[filename]
+                info = file_metadata.get(filename, {})
+                file_type = info.get('file_type') or self._determine_file_type(filename, file_type_mapping)
+                parsed = info.get('parsed') or parse_upi_filename(filename) or {}
 
-                # determine direction: prefer global direction, else infer from filename
-                if direction_global:
-                    dir_folder = direction_global
+                subdir = file_type
+                if file_type.startswith('npci_'):
+                    direction = (parsed.get('direction') or '').lower()
+                    txn_type = (parsed.get('txn_type') or '').lower()
+                    subdir = os.path.join('npci', direction or 'unknown', txn_type or 'unknown')
+                elif file_type == 'cbs_inward' or file_type == 'cbs_outward' or file_type == 'cbs_general':
+                    subdir = 'cbs'
+                elif file_type == 'switch':
+                    subdir = 'switch'
+                elif file_type == 'ntsl':
+                    subdir = 'ntsl'
+                elif file_type == 'adjustment':
+                    subdir = 'adjustment'
+                elif filename.lower().startswith('drc'):
+                    subdir = 'drc'
                 else:
-                    if 'out' in filename.lower() or 'ow' in filename.lower() or 'outward' in filename.lower():
-                        dir_folder = 'Outward'
-                    else:
-                        dir_folder = 'Inward'
+                    subdir = 'other'
 
-                if per_cycle:
-                    dest_dir = os.path.join(UPLOAD_DIR, base_name, 'Cycles', per_cycle, dir_folder)
-                elif cycle_id:
-                    dest_dir = os.path.join(UPLOAD_DIR, base_name, 'Cycles', cycle_id, dir_folder)
-                else:
-                    dest_dir = os.path.join(UPLOAD_DIR, base_name, dir_folder)
-
+                dest_dir = os.path.join(run_folder, subdir)
                 os.makedirs(dest_dir, exist_ok=True)
                 dest_path = os.path.join(dest_dir, file_metadata[filename]['standardized_name'])
-                # copy from legacy path if exists, otherwise write bytes directly
+
                 legacy = file_metadata[filename].get('legacy_path')
                 if legacy and os.path.exists(legacy):
                     try:
                         import shutil
                         shutil.copy2(legacy, dest_path)
                     except Exception:
-                        # fallback to writing content
                         with open(dest_path, 'wb') as f:
                             f.write(file_content)
                 else:
                     with open(dest_path, 'wb') as f:
                         f.write(file_content)
 
-                # record new path in metadata
                 file_metadata[filename]['structured_path'] = dest_path
             except Exception as e:
                 try:
@@ -464,6 +472,13 @@ class FileHandler:
         """Determine file type using enhanced pattern matching"""
         filename_lower = filename.lower().strip()
 
+        # Recognize new NPCI filename format (ISSR/ACQR...)
+        parsed = parse_upi_filename(filename)
+        if parsed:
+            if parsed.get("direction") == "INWARD":
+                return "npci_inward"
+            return "npci_outward"
+
         # Check for exact matches first
         for file_type, patterns in file_type_mapping.items():
             for pattern in patterns:
@@ -555,6 +570,20 @@ class FileHandler:
                 return False
         
         return True
+
+    def _count_rows(self, filepath: str) -> int:
+        """Count data rows (excluding header) for CSV/XLSX files."""
+        try:
+            if filepath.lower().endswith('.csv'):
+                with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                    # subtract header
+                    return max(sum(1 for _ in f) - 1, 0)
+            if filepath.lower().endswith(('.xlsx', '.xls')):
+                df = pd.read_excel(filepath)
+                return int(len(df.index))
+        except Exception:
+            return 0
+        return 0
 
     def _is_xlsx(self, file_content: bytes) -> bool:
         """Check if the file content has the XLSX magic number."""

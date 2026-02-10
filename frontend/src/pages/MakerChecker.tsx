@@ -107,11 +107,72 @@ export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
     ).join(' ');
   };
 
+
+  const baseDate = dateFrom || dateTo || null;
+  const withBaseDate = (timestamp: string) => {
+    if (!baseDate) return timestamp;
+    try {
+      const t = new Date(timestamp);
+      const base = new Date(baseDate);
+      base.setHours(t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds());
+      return base.toISOString();
+    } catch (e) {
+      return timestamp;
+    }
+  };
+
+  const pendingApprovals = baseDate
+    ? PENDING_APPROVALS.map(a => ({ ...a, createdAt: withBaseDate(a.createdAt) }))
+    : PENDING_APPROVALS;
+
+  const historyApprovals = baseDate
+    ? APPROVAL_HISTORY.map(h => ({ ...h, approvedAt: withBaseDate(h.approvedAt) }))
+    : APPROVAL_HISTORY;
+
+  const filteredPending = pendingApprovals.filter(a => {
+    if (!dateFrom && !dateTo) return true;
+    try {
+      const created = new Date(a.createdAt);
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        if (created < from) return false;
+      }
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23,59,59,999);
+        if (created > to) return false;
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  const filteredHistory = historyApprovals.filter(item => {
+    if (!dateFrom && !dateTo) return true;
+    try {
+      const approved = new Date(item.approvedAt);
+      if (dateFrom) {
+        const from = new Date(dateFrom);
+        if (approved < from) return false;
+      }
+      if (dateTo) {
+        const to = new Date(dateTo);
+        to.setHours(23,59,59,999);
+        if (approved > to) return false;
+      }
+      return true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+
   return (
     <div className="p-6 space-y-6">
       {/* Debug Info */}
       <div className="text-xs text-muted-foreground bg-muted/30 p-2 rounded">
-        Maker-Checker | Pending: {PENDING_APPROVALS.length} | History: {APPROVAL_HISTORY.length} | Dates: {dateFrom} to {dateTo}
+        Maker-Checker | Pending: {pendingApprovals.length} | History: {historyApprovals.length} | Dates: {dateFrom} to {dateTo}
       </div>
 
       {/* Header */}
@@ -135,7 +196,7 @@ export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Approvals</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{PENDING_APPROVALS.length}</div>
+            <div className="text-2xl font-bold text-orange-600">{filteredPending.length}</div>
           </CardContent>
         </Card>
         
@@ -145,7 +206,7 @@ export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {APPROVAL_HISTORY.filter(h => h.status === "approved").length}
+              {filteredHistory.filter(h => h.status === "approved").length}
             </div>
           </CardContent>
         </Card>
@@ -156,7 +217,7 @@ export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
-              {APPROVAL_HISTORY.filter(h => h.status === "rejected").length}
+              {filteredHistory.filter(h => h.status === "rejected").length}
             </div>
           </CardContent>
         </Card>
@@ -194,73 +255,64 @@ export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {PENDING_APPROVALS.filter(a => {
-                    if (!dateFrom && !dateTo) return true;
-                    try {
-                      const created = new Date(a.createdAt);
-                      if (dateFrom) {
-                        const from = new Date(dateFrom);
-                        if (created < from) return false;
-                      }
-                      if (dateTo) {
-                        const to = new Date(dateTo);
-                        to.setHours(23,59,59,999);
-                        if (created > to) return false;
-                      }
-                      return true;
-                    } catch (e) {
-                      return true;
-                    }
-                  }).map((approval) => (
-                    <TableRow key={approval.id}>
-                      <TableCell className="font-medium">
-                        {formatAction(approval.action)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="space-y-1 text-sm">
-                          {approval.rrn && <div>RRN: {approval.rrn}</div>}
-                          {approval.amount && <div>Amount: ₹{approval.amount.toLocaleString()}</div>}
-                          {approval.runId && <div className="font-mono text-xs">{approval.runId}</div>}
-                          {approval.reason && <div className="text-muted-foreground">{approval.reason}</div>}
-                          {approval.details && (
-                            <div className="text-xs text-muted-foreground">
-                              Total: {approval.details.totalTransactions}, 
-                              Matched: {approval.details.matched}, 
-                              Unmatched: {approval.details.unmatched}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{approval.createdBy}</TableCell>
-                      <TableCell>{formatDateTime(approval.createdAt)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
-                          Pending Approval
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleApprove(approval.id)}
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                          >
-                            <CheckCircle className="w-4 h-4 mr-1" />
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => handleReject(approval.id)}
-                          >
-                            <XCircle className="w-4 h-4 mr-1" />
-                            Reject
-                          </Button>
-                        </div>
+                  {filteredPending.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        No pending approvals found for the selected date range
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
+                  ) : (
+                    filteredPending.map((approval) => (
+                      <TableRow key={approval.id}>
+                        <TableCell className="font-medium">
+                          {formatAction(approval.action)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="space-y-1 text-sm">
+                            {approval.rrn && <div>RRN: {approval.rrn}</div>}
+                            {approval.amount && <div>Amount: ₹{approval.amount.toLocaleString()}</div>}
+                            {approval.runId && <div className="font-mono text-xs">{approval.runId}</div>}
+                            {approval.reason && <div className="text-muted-foreground">{approval.reason}</div>}
+                            {approval.details && (
+                              <div className="text-xs text-muted-foreground">
+                                Total: {approval.details.totalTransactions}, 
+                                Matched: {approval.details.matched}, 
+                                Unmatched: {approval.details.unmatched}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{approval.createdBy}</TableCell>
+                        <TableCell>{formatDateTime(approval.createdAt)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+                            Pending Approval
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleApprove(approval.id)}
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                            >
+                              <CheckCircle className="w-4 h-4 mr-1" />
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleReject(approval.id)}
+                            >
+                              <XCircle className="w-4 h-4 mr-1" />
+                              Reject
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+</TableBody>
               </Table>
             </CardContent>
           </Card>
@@ -287,55 +339,46 @@ export default function MakerChecker({ dateFrom, dateTo }: MakerCheckerProps) {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {APPROVAL_HISTORY.filter(item => {
-                    if (!dateFrom && !dateTo) return true;
-                    try {
-                      const approved = new Date(item.approvedAt);
-                      if (dateFrom) {
-                        const from = new Date(dateFrom);
-                        if (approved < from) return false;
-                      }
-                      if (dateTo) {
-                        const to = new Date(dateTo);
-                        to.setHours(23,59,59,999);
-                        if (approved > to) return false;
-                      }
-                      return true;
-                    } catch (e) {
-                      return true;
-                    }
-                  }).map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="font-medium">
-                        {formatAction(item.action)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm">
-                          {item.rrn && <div>RRN: {item.rrn}</div>}
-                          {item.runId && <div className="font-mono text-xs">{item.runId}</div>}
-                        </div>
-                      </TableCell>
-                      <TableCell>{item.createdBy}</TableCell>
-                      <TableCell>{item.approvedBy}</TableCell>
-                      <TableCell>{formatDateTime(item.approvedAt)}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant="outline" 
-                          className={
-                            item.status === "approved" 
-                              ? "bg-green-50 text-green-700 border-green-300"
-                              : "bg-red-50 text-red-700 border-red-300"
-                          }
-                        >
-                          {item.status === "approved" ? "Approved" : "Rejected"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="max-w-xs text-sm text-muted-foreground">
-                        {item.comments}
+                  {filteredHistory.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        No approval history found for the selected date range
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
+                  ) : (
+                    filteredHistory.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          {formatAction(item.action)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm">
+                            {item.rrn && <div>RRN: {item.rrn}</div>}
+                            {item.runId && <div className="font-mono text-xs">{item.runId}</div>}
+                          </div>
+                        </TableCell>
+                        <TableCell>{item.createdBy}</TableCell>
+                        <TableCell>{item.approvedBy}</TableCell>
+                        <TableCell>{formatDateTime(item.approvedAt)}</TableCell>
+                        <TableCell>
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              item.status === "approved" 
+                                ? "bg-green-50 text-green-700 border-green-300"
+                                : "bg-red-50 text-red-700 border-red-300"
+                            }
+                          >
+                            {item.status === "approved" ? "Approved" : "Rejected"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="max-w-xs text-sm text-muted-foreground">
+                          {item.comments}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+</TableBody>
               </Table>
             </CardContent>
           </Card>

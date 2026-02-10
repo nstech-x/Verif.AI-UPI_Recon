@@ -8,12 +8,13 @@ from datetime import datetime
 # PROD = Real database, async jobs, dynamic generation
 APP_MODE = os.getenv("APP_MODE", "DEMO")  # DEMO | PROD
 
-# File paths
-UPLOAD_DIR = "data/uploads"
-OUTPUT_DIR = "data/output"
-SAMPLE_DATA_DIR = "sample_data"
-DEMO_DATA_DIR = "demo_data"
-REPORTS_STORE_DIR = "../reports_store"
+# File paths (absolute, anchored to backend/)
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+UPLOAD_DIR = os.path.join(BASE_DIR, "data", "uploads")
+OUTPUT_DIR = os.path.join(BASE_DIR, "data", "output")
+SAMPLE_DATA_DIR = os.path.join(BASE_DIR, "sample_data")
+DEMO_DATA_DIR = os.path.join(BASE_DIR, "demo_data")
+REPORTS_STORE_DIR = os.path.join(BASE_DIR, "..", "reports_store")
 
 # Required fields for all files (our internal standard)
 REQUIRED_FIELDS = {
@@ -265,4 +266,3 @@ TRANSACTION_CATEGORIES = {
     'RET': 'Return transactions',
     'UNMATCHED': 'Transactions that could not be matched'
 }
-

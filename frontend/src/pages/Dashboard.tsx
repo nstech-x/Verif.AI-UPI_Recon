@@ -211,8 +211,6 @@ export default function Dashboard() {
 
   const handleDateFilterChange = (dateFrom: string, dateTo: string) => {
     updateDateRange(dateFrom, dateTo);
-    // Trigger dashboard refresh when filters change
-    window.dispatchEvent(new CustomEvent("dashboardFiltersChanged"));
   };
 
   // Keep local date range state to pass to embedded modules
