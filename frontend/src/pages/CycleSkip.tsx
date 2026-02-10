@@ -15,6 +15,7 @@ export default function CycleSkip() {
   const [cycleNumber, setCycleNumber] = useState("");
   const [skipReason, setSkipReason] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
 
   // Demo data - NPCI cycle skip records
   const [cycleSkipRecords] = useState([
@@ -74,6 +75,19 @@ export default function CycleSkip() {
       return;
     }
 
+    // Create FormData and include uploadedFile if present
+    const formData = new FormData();
+    formData.append('cycleDate', cycleDate);
+    formData.append('cycleNumber', cycleNumber);
+    formData.append('skipReason', skipReason);
+    formData.append('remarks', remarks);
+    if (uploadedFile) {
+      formData.append('file', uploadedFile);
+    }
+
+    // TODO: Send formData to backend API
+    // Example: apiClient.post('/cycle-skip', formData)
+
     toast({
       title: "Cycle Skip Requested (Demo)",
       description: `Cycle skip request for ${cycleDate} - ${cycleNumber} has been submitted for approval`
@@ -84,6 +98,9 @@ export default function CycleSkip() {
     setCycleNumber("");
     setSkipReason("");
     setRemarks("");
+    setUploadedFile(null);
+    const fileInput = document.getElementById('cycle-any-file') as HTMLInputElement;
+    if (fileInput) fileInput.value = '';
   };
 
   const getStatusBadge = (status: string) => {
@@ -186,12 +203,33 @@ export default function CycleSkip() {
             </div>
           </div>
 
+          {/* Generic file upload for NPCI Cycle (accept any file type) */}
+          <div className="mt-4">
+            <Label className="text-sm font-medium">Upload any file (optional)</Label>
+            <div className="flex items-center gap-4 mt-2">
+              <Button variant="outline" onClick={() => document.getElementById('cycle-any-file')?.click()}>
+                Browse
+              </Button>
+              <input id="cycle-any-file" type="file" className="hidden" accept="*/*" onChange={(e) => {
+                const f = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                setUploadedFile(f);
+                if (f) {
+                  toast({ title: 'File selected', description: `${f.name} (${f.type || 'unknown type'})` });
+                }
+              }} />
+              {uploadedFile && <div className="text-sm text-muted-foreground">{uploadedFile.name}</div>}
+            </div>
+          </div>
+
           <div className="flex justify-end gap-3 mt-6">
             <Button variant="outline" onClick={() => {
               setCycleDate("");
               setCycleNumber("");
               setSkipReason("");
               setRemarks("");
+              setUploadedFile(null);
+              const fileInput = document.getElementById('cycle-any-file') as HTMLInputElement;
+              if (fileInput) fileInput.value = '';
             }}>
               Clear
             </Button>

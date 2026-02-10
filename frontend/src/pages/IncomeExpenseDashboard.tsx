@@ -1,8 +1,5 @@
-import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Calendar } from "../components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import { Skeleton } from "../components/ui/skeleton";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../lib/api";
@@ -12,11 +9,10 @@ import {
   PieChart, Pie, Cell, LineChart, Line
 } from "recharts";
 import {
-  TrendingUp, TrendingDown, Download, Calendar as CalendarIcon,
-  DollarSign, CreditCard, FileText, AlertCircle
+  TrendingUp, TrendingDown, Download,
+  DollarSign, AlertCircle
 } from "lucide-react";
-import { cn } from "../lib/utils";
-import { ChartContainer, ChartTooltipContent } from "../components/ui/chart";
+import { ChartContainer } from "../components/ui/chart";
 import { toast } from "sonner";
 
 // Chart colors
@@ -32,25 +28,13 @@ const COLORS = {
 
 const EXPENSE_COLORS = ["#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16"];
 
-export default function IncomeExpenseDashboard() {
-  // Date range state
-  const [dateFrom, setDateFrom] = useState<Date>();
-  const [dateTo, setDateTo] = useState<Date>();
+type IncomeExpenseDashboardProps = {
+  dateFrom?: string;
+  dateTo?: string;
+};
 
-  // Set default dates to current month on mount
-  useEffect(() => {
-    const now = new Date();
-    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    setDateFrom(firstDay);
-    setDateTo(lastDay);
-  }, []);
-
-  // Format dates for API
-  const formatDateForAPI = (date: Date | undefined) => {
-    if (!date) return "";
-    return format(date, "yyyy-MM-dd");
-  };
+export default function IncomeExpenseDashboard({ dateFrom, dateTo }: IncomeExpenseDashboardProps) {
+  const formatDateForAPI = (date: string | undefined) => date || "";
 
   // Fetch income/expense data
   const { data: incomeExpenseData, isLoading, error } = useQuery({
@@ -165,68 +149,14 @@ export default function IncomeExpenseDashboard() {
           Download MIS Report
         </Button>
       </div>
-
-      {/* Date Range Filter */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Date Range Filter</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">From Date</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dateFrom && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateFrom ? format(dateFrom, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateFrom}
-                    onSelect={setDateFrom}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div className="flex-1">
-              <label className="text-sm font-medium mb-2 block">To Date</label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !dateTo && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {dateTo ? format(dateTo, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={dateTo}
-                    onSelect={setDateTo}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {!dateFrom || !dateTo ? (
+        <Card className="border-blue-200 bg-blue-50">
+          <CardContent className="flex items-center gap-2 p-4">
+            <AlertCircle className="w-5 h-5 text-blue-600" />
+            <p className="text-blue-700">Select a date range from the Dashboard filter to view data.</p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {isLoading && (
         <div className="space-y-4">

@@ -22,8 +22,7 @@ import {
   UserCheck,
   MessageSquare,
   Scale,
-  RefreshCcw,
-  TrendingUp
+  RefreshCcw
 } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
@@ -52,7 +51,6 @@ const menuItems: MenuItem[] = [
   { path: "/auto-match", label: "Auto-Match", icon: PlayCircle, disabled: true, hidden: true },
   { path: "/rollback", label: "Roll-Back", icon: RotateCcw },
   { path: "/cycle-skip", label: "NPCI Cycle Skip", icon: RefreshCcw },
-  { path: "/income-expense", label: "Income & Expense", icon: TrendingUp },
   { path: "/enquiry", label: "Ask Verif.AI", icon: MessageSquare },
   { path: "/reports", label: "Reports", icon: FileText },
   { path: "/ai-showcase", label: "AI Showcase", icon: Sparkles },
@@ -151,7 +149,10 @@ export default function Layout({ children }: LayoutProps) {
           <nav className="space-y-1 flex-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = location.pathname === item.path;
+              // Check if active: compare full paths including query params
+              const isActive = item.path.includes('?')
+                ? `${location.pathname}${location.search}` === item.path
+                : location.pathname === item.path;
 
               // Skip hidden items
               if (item.hidden) {

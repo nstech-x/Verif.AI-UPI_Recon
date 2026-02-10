@@ -73,7 +73,14 @@ class FileHandler:
                         pass
                     file_path = final_path
 
-                    saved_files[file_type] = os.path.basename(file_path)
+                    existing = saved_files.get(file_type)
+                    if existing is None:
+                        saved_files[file_type] = os.path.basename(file_path)
+                    elif isinstance(existing, list):
+                        existing.append(os.path.basename(file_path))
+                        saved_files[file_type] = existing
+                    else:
+                        saved_files[file_type] = [existing, os.path.basename(file_path)]
                     file_metadata[filename] = {
                         'standardized_name': os.path.basename(file_path),
                         'file_type': file_type,

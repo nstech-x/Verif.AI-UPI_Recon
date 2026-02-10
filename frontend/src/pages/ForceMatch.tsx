@@ -146,9 +146,17 @@ const forceMatchReducer = (state: ForceMatchState, action: ForceMatchAction): Fo
 };
 
   const transformRawDataToTransactions = (rawData: any): Transaction[] => {
-  if (!rawData || !rawData.data) return [];
+  // Handle both formats: { data: {...} } and { exceptions: {...} }
+  let dataToProcess = rawData?.data || rawData?.exceptions || {};
+  
+  if (!dataToProcess || Object.keys(dataToProcess).length === 0) {
+    console.warn("No data found in API response");
+    return [];
+  }
 
-  return Object.entries(rawData.data).map(([key, record]: [string, any]) => {
+  console.log("Processing transactions:", Object.keys(dataToProcess).length);
+
+  return Object.entries(dataToProcess).map(([key, record]: [string, any]) => {
     // Use RRN from record data if available, otherwise use the key
     // Ensure we're using the actual RRN field, not transaction_id
     const rrn = record?.rrn || record?.RRN || key;
@@ -252,6 +260,15 @@ export default function ForceMatch() {
 
   useEffect(() => {
     fetchUnmatchedTransactions();
+  }, []);
+
+  // Add polling mechanism - refetch every 30 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      fetchUnmatchedTransactions();
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   useEffect(() => {

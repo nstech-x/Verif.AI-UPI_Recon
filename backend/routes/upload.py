@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, date
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -41,16 +41,29 @@ async def upload_files(
         if cycle and cycle not in valid_cycles:
             raise HTTPException(status_code=400, detail=f"Invalid cycle. Valid cycles: {', '.join(valid_cycles)}")
 
-        # Required file mapping
+        # Required single files and optional multi-files
         required_files = {
             'cbs_inward': cbs_inward,
             'cbs_outward': cbs_outward,
             'switch': switch,
-            'npci_inward': npci_inward,
-            'npci_outward': npci_outward,
-            'ntsl': ntsl,
-            'adjustment': adjustment,
         }
+        optional_multi_files: Dict[str, List[UploadFile]] = {
+            'npci_inward': [],
+            'npci_outward': [],
+            'ntsl': [],
+            'adjustment': [],
+        }
+        duplicate_required: List[str] = []
+
+        # Include any named optional files if present
+        if npci_inward:
+            optional_multi_files['npci_inward'].append(npci_inward)
+        if npci_outward:
+            optional_multi_files['npci_outward'].append(npci_outward)
+        if ntsl:
+            optional_multi_files['ntsl'].append(ntsl)
+        if adjustment:
+            optional_multi_files['adjustment'].append(adjustment)
 
         # Map generic files list
         if files:
@@ -58,32 +71,45 @@ async def upload_files(
                 fname = upfile.filename.lower()
                 assigned = False
                 if 'cbs' in fname and 'in' in fname:
-                    required_files['cbs_inward'] = upfile
+                    if required_files['cbs_inward'] is None:
+                        required_files['cbs_inward'] = upfile
+                    else:
+                        duplicate_required.append(upfile.filename)
                     assigned = True
                 elif 'cbs' in fname and 'out' in fname:
-                    required_files['cbs_outward'] = upfile
+                    if required_files['cbs_outward'] is None:
+                        required_files['cbs_outward'] = upfile
+                    else:
+                        duplicate_required.append(upfile.filename)
                     assigned = True
                 elif 'switch' in fname:
-                    required_files['switch'] = upfile
+                    if required_files['switch'] is None:
+                        required_files['switch'] = upfile
+                    else:
+                        duplicate_required.append(upfile.filename)
                     assigned = True
                 elif 'npci' in fname and 'in' in fname:
-                    required_files['npci_inward'] = upfile
+                    optional_multi_files['npci_inward'].append(upfile)
                     assigned = True
                 elif 'npci' in fname and 'out' in fname:
-                    required_files['npci_outward'] = upfile
+                    optional_multi_files['npci_outward'].append(upfile)
                     assigned = True
                 elif 'ntsl' in fname or 'national' in fname:
-                    required_files['ntsl'] = upfile
+                    optional_multi_files['ntsl'].append(upfile)
                     assigned = True
                 elif 'adjust' in fname or 'adj' in fname:
-                    required_files['adjustment'] = upfile
+                    optional_multi_files['adjustment'].append(upfile)
                     assigned = True
 
                 if not assigned:
                     for k, v in required_files.items():
                         if v is None:
                             required_files[k] = upfile
+                            assigned = True
                             break
+                if not assigned:
+                    # If still unassigned, treat as optional adjustment fallback
+                    optional_multi_files['adjustment'].append(upfile)
 
         uploaded_files_content = {}
         invalid_files = []
@@ -98,6 +124,67 @@ async def upload_files(
                     "field": key,
                     "error": "required file is missing",
                     "suggestion": f"Please upload a {key.replace('_', ' ')} file",
+                })
+
+        for fname in duplicate_required:
+            invalid_files.append({
+                "filename": fname,
+                "error": "multiple files detected for a required type",
+                "suggestion": "Please upload only one file for CBS Inward, CBS Outward, and Switch",
+            })
+
+        def validate_filename_cycle_date(file_type: str, filename: str) -> Optional[str]:
+            """Validate filename format and date for NPCI/NTSL/Adjustment files."""
+            if file_type not in ('npci_inward', 'npci_outward', 'ntsl', 'adjustment'):
+                return None
+            name = filename.lower()
+            import re
+            cycle_match = re.search(r'cycle\s*0*(\d{1,2})', name)
+            type_match = re.search(r'(?:^|[_-])(inward|outward)(?:[_-]|$)', name)
+            date_match = re.search(r'(\d{2})(\d{2})(\d{4})', name)
+
+            if not cycle_match or not date_match or not type_match:
+                return "Filename must follow pattern cycle<no>_(inward|outward)_DDMMYYYY[_suffix]"
+
+            cycle_num = int(cycle_match.group(1))
+            if cycle_num < 1 or cycle_num > 10:
+                return "Cycle number in filename must be between 1 and 10"
+
+            dd = int(date_match.group(1))
+            mm = int(date_match.group(2))
+            yyyy = int(date_match.group(3))
+
+            try:
+                parsed = date(yyyy, mm, dd)
+            except Exception:
+                return "Invalid date in filename (expected DDMMYYYY)"
+
+            if parsed != date.today():
+                return "Filename date must be today's date"
+
+            if file_type == 'npci_inward' and type_match.group(1) != 'inward':
+                return "NPCI inward file name must include 'inward'"
+            if file_type == 'npci_outward' and type_match.group(1) != 'outward':
+                return "NPCI outward file name must include 'outward'"
+
+            return None
+
+        def iter_files():
+            for key, upfile in required_files.items():
+                if upfile is not None:
+                    yield key, upfile
+            for key, files_list in optional_multi_files.items():
+                for upfile in files_list:
+                    yield key, upfile
+
+        for key, upfile in iter_files():
+            # Optional NPCI/NTSL/Adjustment filename validation
+            filename_error = validate_filename_cycle_date(key, upfile.filename)
+            if filename_error:
+                invalid_files.append({
+                    "filename": upfile.filename,
+                    "error": filename_error,
+                    "suggestion": "Rename the file to include cycle, direction, and today's date",
                 })
                 continue
 

@@ -3,14 +3,15 @@
 NPCI / UPI compliant mock data generator for bank reconciliation testing.
 Aligned with Verif.ai UPI Functional Document V2 (06-Jan-2026).
 
-Generates XLSX files in backend/bank_recon_files:
-  1_CBS_Inward.xlsx
-  2_CBS_Outward.xlsx
-  3_Switch.xlsx
-  4_NPCI_Inward.xlsx
-  5_NPCI_Outward.xlsx
-  6_NTSL.xlsx
-  7_Internal_Adjustments.xlsx   (INTERNAL ONLY, not Annexure-IV)
+Generates reconciliation input files under backend/bank_recon_files using
+backend upload/validation-friendly naming and columns:
+  cbs_inward.csv
+  cbs_outward.csv
+  switch.csv
+  cycle01_inward_DDMMYYYY_npci_inward.csv
+  cycle01_outward_DDMMYYYY_npci_outward.csv
+  cycle01_inward_DDMMYYYY_ntsl.csv
+  cycle01_inward_DDMMYYYY_adjustment.csv
 
 Enhancements:
 - UPI fields included: UPI_Tran_ID, Payer_PSP, Payee_PSP, MCC, Originating_Channel
@@ -30,17 +31,24 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+CURRENT_FILE = Path(__file__).resolve()
+BACKEND_DIR = CURRENT_FILE.parents[2]
+
 # -------------------------------------------------
-# CONFIGURATIO
+# CONFIGURATION
 # -------------------------------------------------
-OUTPUT_DIR = "bank_recon_files"
+OUTPUT_DIR = BACKEND_DIR / "bank_recon_files"
 NUM_MASTER_RECORDS = 300
 EXTRA_SWITCH_RECORDS = 12
 SEED = 42
 
-CYCLE_DATE = datetime.now().strftime("%Y-%m-%d")
-CYCLE_ID = f"{CYCLE_DATE}_CYCLE_01"
-RUN_ID = f"RUN_{CYCLE_ID}"
+RUN_TS = datetime.now()
+CYCLE_DATE = RUN_TS.strftime("%Y-%m-%d")
+DATE_DDMMYYYY = RUN_TS.strftime("%d%m%Y")
+CYCLE_NO = 1
+CYCLE_ID = f"{CYCLE_NO}C"
+RUN_ID = f"RUN_{RUN_TS.strftime('%Y%m%d_%H%M%S')}"
+DIRECTION = "INWARD"
 
 random.seed(SEED)
 np.random.seed(SEED)
@@ -141,7 +149,9 @@ def generate_master(n):
             'Amount': amount,
             'Tran_Date': CYCLE_DATE,
             'Transaction_Date': CYCLE_DATE,
+            'Date': CYCLE_DATE,
             'Dr_Cr': drcr,
+            'Debit_Credit': drcr,
             'RC': rc,
             'Tran_Type': 'U3',  # RAW transactions
             'Status': rc_to_status(rc),
@@ -280,14 +290,22 @@ settled['Source'] = 'NTSL'
 # -------------------------------------------------
 # WRITE FILES
 # -------------------------------------------------
-print('Writing output XLSX files...')
-df_switch.to_excel(f"{OUTPUT_DIR}/3_Switch.xlsx", index=False)
+print('Writing output files...')
+
+def _write(df: pd.DataFrame, filename: str) -> None:
+    path = OUTPUT_DIR / filename
+    if filename.lower().endswith(".xlsx"):
+        df.to_excel(path, index=False)
+    else:
+        df.to_csv(path, index=False)
+
+_write(df_switch, "switch.csv")
 
 # CBS Inward/Outward
 # Keep identical schema across all files
 common_cols = [
     'Run_ID', 'Cycle_ID', 'UPI_Tran_ID', 'RRN', 'Amount', 'Tran_Date', 'Transaction_Date',
-    'Dr_Cr', 'RC', 'Tran_Type', 'Status', 'Account_No', 'Beneficiary',
+    'Date', 'Dr_Cr', 'Debit_Credit', 'RC', 'Tran_Type', 'Status', 'Account_No', 'Beneficiary',
     'Payer_PSP', 'Payee_PSP', 'MCC', 'Originating_Channel', 'Source'
 ]
 
@@ -303,15 +321,19 @@ for c in ['Settlement_Charge', 'Amount_Settled']:
 settled = settled[settled_cols]
 
 # Write CBS
-df_cbs_in.to_excel(f"{OUTPUT_DIR}/1_CBS_Inward.xlsx", index=False)
-df_cbs_out.to_excel(f"{OUTPUT_DIR}/2_CBS_Outward.xlsx", index=False)
+_write(df_cbs_in, "cbs_inward.csv")
+_write(df_cbs_out, "cbs_outward.csv")
 
 # Write NPCI
-npc_in.to_excel(f"{OUTPUT_DIR}/4_NPCI_Inward.xlsx", index=False)
-npc_out.to_excel(f"{OUTPUT_DIR}/5_NPCI_Outward.xlsx", index=False)
+npci_in_name = f"cycle{CYCLE_NO:02d}_inward_{DATE_DDMMYYYY}_npci_inward.csv"
+npci_out_name = f"cycle{CYCLE_NO:02d}_outward_{DATE_DDMMYYYY}_npci_outward.csv"
+_write(npc_in, npci_in_name)
+_write(npc_out, npci_out_name)
 
 # Write NTSL
-settled.to_excel(f"{OUTPUT_DIR}/6_NTSL.xlsx", index=False)
+ntsl_dir = "inward" if DIRECTION.upper().startswith("IN") else "outward"
+ntsl_name = f"cycle{CYCLE_NO:02d}_{ntsl_dir}_{DATE_DDMMYYYY}_ntsl.csv"
+_write(settled, ntsl_name)
 
 # -------------------------------------------------
 # ADJUSTMENT.CSV - APPLY DURING RECON
@@ -378,7 +400,9 @@ for i, rrn in enumerate(failed_rrns[5:8]):  # Adjust 3 more with amount correcti
         'Payee PSP': rec['Payee_PSP']
     })
 
-pd.DataFrame(adjustments).to_csv(f"{OUTPUT_DIR}/7_Adjustment.csv", index=False)
+adj_dir = "inward" if DIRECTION.upper().startswith("IN") else "outward"
+adj_name = f"cycle{CYCLE_NO:02d}_{adj_dir}_{DATE_DDMMYYYY}_adjustment.csv"
+pd.DataFrame(adjustments).to_csv(OUTPUT_DIR / adj_name, index=False)
 
 # -------------------------------------------------
 # FINAL CHECKS
@@ -387,7 +411,7 @@ pd.DataFrame(adjustments).to_csv(f"{OUTPUT_DIR}/7_Adjustment.csv", index=False)
 non_empty_rrns = df_switch[df_switch['RRN'].astype(str) != '']['RRN']
 assert non_empty_rrns.is_unique, "Duplicate non-empty RRNs detected in Switch file!"
 
-print("\n✅ NPCI/UPI compliant mock files generated with realistic exception scenarios")
-print("📂 Output directory:", os.path.abspath(OUTPUT_DIR))
+print("\nNPCI/UPI compliant mock files generated with realistic exception scenarios")
+print("Output directory:", os.path.abspath(OUTPUT_DIR))
 for f in sorted(Path(OUTPUT_DIR).glob("*")):
     print(" -", f.name)

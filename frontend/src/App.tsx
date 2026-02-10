@@ -29,9 +29,15 @@ import BlockchainAudit from "./pages/BlockchainAudit";
 import MakerChecker from "./pages/MakerChecker";
 import Disputes from "./pages/Disputes";
 import CycleSkip from "./pages/CycleSkip";
-import IncomeExpenseDashboard from "./pages/IncomeExpenseDashboard";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  },
+});
 
 // Protected Route component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -73,7 +79,7 @@ const AppRoutes = () => {
       <Route path="/dashboard/maker-checker" element={<ProtectedRoute><Layout><MakerChecker /></Layout></ProtectedRoute>} />
       <Route path="/dashboard/disputes" element={<ProtectedRoute><Layout><Disputes /></Layout></ProtectedRoute>} />
       <Route path="/cycle-skip" element={<ProtectedRoute><Layout><CycleSkip /></Layout></ProtectedRoute>} />
-      <Route path="/income-expense" element={<ProtectedRoute><Layout><IncomeExpenseDashboard /></Layout></ProtectedRoute>} />
+      <Route path="/income-expense" element={<Navigate to="/?tab=income" replace />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

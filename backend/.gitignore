@@ -4,6 +4,13 @@
 /__pycache__
 /bank_recon_files/*
 /venv
-DOCUMENTS/*
-DOCUMENTS/
-DOCUMENTS/**
+
+# Not important files
+.DOCUMENTS/*
+.DOCUMENTS/
+.DOCUMENTS/RUN_*/*
+
+.kombai/* 
+.kombai/ 
+.qodo/* 
+.qodo/ 

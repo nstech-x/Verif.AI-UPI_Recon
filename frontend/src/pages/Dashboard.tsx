@@ -57,6 +57,8 @@ import {
   Check,
   Scale,
 } from "lucide-react";
+import IncomeExpenseDashboard from "./IncomeExpenseDashboard";
+import { useLocation } from "react-router-dom";
 import { Button } from "../components/ui/button";
 import {
   Carousel,
@@ -88,6 +90,7 @@ export default function Dashboard() {
   const { isDemoMode, demoSummary, demoHistorical } = useDemoData();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("recon");
+  const location = useLocation();
   const [txnType, setTxnType] = useState("all");
   const [txnCategory, setTxnCategory] = useState("all");
   const [selectedCycle, setSelectedCycle] = useState("all");
@@ -106,10 +109,12 @@ export default function Dashboard() {
       console.log("Summary API Response:", data);
       return data;
     },
-    staleTime: 60000, // Data stays fresh for 60 seconds to avoid constant refetches
-    refetchInterval: isDemoMode ? false : 120000, // Auto-refresh every 2 minutes in real mode (increased from 30s)
+    staleTime: 30000, // Data stays fresh for 30 seconds (reduced from 60s)
+    refetchInterval: isDemoMode ? false : 60000, // Auto-refresh every 1 minute (reduced from 2 minutes)
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnReconnect: true, // Refetch when reconnected
     enabled: !isDemoMode, // Only fetch if not in demo mode
-    retry: 0, // Disable retries to fail fast if backend is down
+    retry: 1, // Allow 1 retry (changed from 0)
   });
 
   const { data: apiHistoricalData, isLoading: isHistoricalLoading } = useQuery({
@@ -125,10 +130,12 @@ export default function Dashboard() {
         return [];
       }
     },
-    staleTime: 60000, // Data stays fresh for 60 seconds
-    refetchInterval: isDemoMode ? false : 120000, // Auto-refresh every 2 minutes in real mode (increased from 30s)
+    staleTime: 30000, // Data stays fresh for 30 seconds (reduced from 60s)
+    refetchInterval: isDemoMode ? false : 60000, // Auto-refresh every 1 minute (reduced from 2 minutes)
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    refetchOnReconnect: true, // Refetch when reconnected
     enabled: !isDemoMode, // Only fetch if not in demo mode
-    retry: 0, // Disable retries to fail fast
+    retry: 1, // Allow 1 retry (changed from 0)
   });
 
   // Use demo data when available, otherwise use API data
@@ -143,6 +150,13 @@ export default function Dashboard() {
       setLastRefresh(new Date());
     }
   };
+
+  // Initialize active tab from query param on mount and when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tab = params.get("tab");
+    if (tab) setActiveTab(tab);
+  }, [location.search]);
 
   // Auto-refresh every 2 minutes when not in demo mode (increased from 30 seconds to reduce API load)
   useEffect(() => {
@@ -446,6 +460,12 @@ export default function Dashboard() {
             Date-wise Details
           </TabsTrigger>
           <TabsTrigger
+            value="income"
+            className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+          >
+            Income & Expense
+          </TabsTrigger>
+          <TabsTrigger
             value="disputes"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
@@ -455,7 +475,7 @@ export default function Dashboard() {
             value="users"
             className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
-            User Management
+            Users
           </TabsTrigger>
         </TabsList>
 
@@ -985,7 +1005,7 @@ export default function Dashboard() {
           {/* Quick links: open Disputes / User Management tabs */}
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setActiveTab("disputes")}>Open Disputes</Button>
-            <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>Open User Management</Button>
+            <Button variant="outline" size="sm" onClick={() => setActiveTab("users")}>Open Users</Button>
           </div>
 
           {/* KPI Cards - Reconciliation Metrics */}
@@ -1286,6 +1306,11 @@ export default function Dashboard() {
               )}
             </div>
           </Card>
+        </TabsContent>
+
+        {/* Income & Expense Tab */}
+        <TabsContent value="income" className="space-y-6 mt-6">
+          <IncomeExpenseDashboard dateFrom={embeddedDateFrom} dateTo={embeddedDateTo} />
         </TabsContent>
 
         {/* Today's Breaks Tab */}

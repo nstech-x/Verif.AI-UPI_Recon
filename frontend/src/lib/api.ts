@@ -149,10 +149,10 @@ export const apiClient = {
     cbs_inward: File;
     cbs_outward: File;
     switch: File;
-    npci_inward?: File;
-    npci_outward?: File;
-    ntsl?: File;
-    adjustment?: File;
+    npci_inward?: File | File[];
+    npci_outward?: File | File[];
+    ntsl?: File | File[];
+    adjustment?: File | File[];
     cbs_balance?: string;
     transaction_date?: string;
   }): Promise<UploadResponse> => {
@@ -162,6 +162,14 @@ export const apiClient = {
     Object.values(files).forEach(value => {
       if (value instanceof File) {
         formData.append('files', value);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach((file) => {
+          if (file instanceof File) {
+            formData.append('files', file);
+          }
+        });
       }
     });
     
