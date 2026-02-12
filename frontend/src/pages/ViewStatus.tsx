@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { AlertCircle, CheckCircle, Eye, RefreshCw } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { useToast } from "../hooks/use-toast";
+import { ScrollArea } from "../components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -190,6 +191,9 @@ export default function ViewStatus() {
     if (summary?.key_error_message) return summary.key_error_message;
     return "-";
   };
+  const filesWithIssuesCount = validationDetails.filter(
+    (detail: any) => getErrorDisplay(detail, selectedError) !== "-"
+  ).length;
 
   return (
     <div className="p-6 space-y-6">
@@ -376,7 +380,38 @@ export default function ViewStatus() {
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="overflow-x-auto">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Card className="border-red-200 bg-red-50/60 shadow-none">
+                    <CardContent className="p-3">
+                      <p className="text-xs text-muted-foreground">Files With Issues</p>
+                      <p className="text-lg font-semibold text-red-700">{filesWithIssuesCount}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-3">
+                      <p className="text-xs text-muted-foreground">Required Files</p>
+                      <p className="text-lg font-semibold">{selectedError?.required_count ?? "-"}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-3">
+                      <p className="text-xs text-muted-foreground">Uploaded Files</p>
+                      <p className="text-lg font-semibold">{selectedError?.uploaded_count ?? validationDetails.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="shadow-none">
+                    <CardContent className="p-3">
+                      <p className="text-xs text-muted-foreground">Row-Level Errors</p>
+                      <p className="text-lg font-semibold text-red-700">{dataRowErrors.length}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+                {selectedError?.key_error_message ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                    {selectedError.key_error_message}
+                  </div>
+                ) : null}
+                <div className="overflow-x-auto rounded-md border">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -384,6 +419,7 @@ export default function ViewStatus() {
                         <TableHead className="text-center">Required Rows</TableHead>
                         <TableHead className="text-center">Uploaded Rows</TableHead>
                         <TableHead className="text-center">Uploaded By</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
                         <TableHead>Error</TableHead>
                         <TableHead className="text-center">Action</TableHead>
                       </TableRow>
@@ -395,8 +431,21 @@ export default function ViewStatus() {
                           <TableCell className="text-center">{getRequiredRowsDisplay(detail)}</TableCell>
                           <TableCell className="text-center">{detail.uploaded_rows ?? "-"}</TableCell>
                           <TableCell className="text-center">{detail.uploaded_by || "AUTO"}</TableCell>
-                          <TableCell className="max-w-[340px] text-xs text-red-700">
-                            {getErrorDisplay(detail, selectedError)}
+                          <TableCell className="text-center">
+                            {getErrorDisplay(detail, selectedError) === "-" ? (
+                              <Badge variant="default" className="bg-green-600 text-white">OK</Badge>
+                            ) : (
+                              <Badge variant="destructive">Issue</Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-[360px] text-xs">
+                            {getErrorDisplay(detail, selectedError) === "-" ? (
+                              <span className="text-muted-foreground">-</span>
+                            ) : (
+                              <div className="rounded-md border border-red-200 bg-red-50 p-2 text-red-800">
+                                {getErrorDisplay(detail, selectedError)}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell className="text-center">
                             {!rollbackedFiles.has(detail.file_name) ? (
@@ -447,13 +496,15 @@ export default function ViewStatus() {
                     <p className="text-sm font-semibold text-red-800 mb-2">
                       Row-Level Validation Errors ({dataRowErrors.length})
                     </p>
-                    <div className="max-h-64 overflow-auto space-y-1 text-xs text-red-800">
-                      {dataRowErrors.map((err: any, idx: number) => (
-                        <div key={`${err.file_name}-${err.row}-${idx}`}>
-                          {err.file_name} | Row {err.row} | {err.column}: {err.error}
-                        </div>
-                      ))}
-                    </div>
+                    <ScrollArea className="max-h-64 pr-2">
+                      <div className="space-y-1 text-xs text-red-800">
+                        {dataRowErrors.map((err: any, idx: number) => (
+                          <div key={`${err.file_name}-${err.row}-${idx}`} className="rounded border border-red-200 bg-white/70 px-2 py-1">
+                            {err.file_name} | Row {err.row} | {err.column}: {err.error}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
                   </div>
                 ) : null}
               </div>
