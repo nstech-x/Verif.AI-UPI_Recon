@@ -5,6 +5,7 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { AlertCircle, CheckCircle, Eye, RefreshCw } from "lucide-react";
 import { apiClient } from "../lib/api";
+import { useToast } from "../hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +15,7 @@ import {
 } from "../components/ui/dialog";
 
 export default function ViewStatus() {
+  const { toast } = useToast();
   const [uploadStatusData, setUploadStatusData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
@@ -132,6 +134,30 @@ export default function ViewStatus() {
     ];
   };
 
+  const formatFileType = (key: string) => {
+    const tokenMap: Record<string, string> = {
+      cbs: "CBS",
+      npci: "NPCI",
+      ntsl: "NTSL",
+      inward: "Inward",
+      outward: "Outward",
+      switch: "Switch",
+      adjustment: "Adjustment",
+      drc: "DRC",
+      p2p: "P2P",
+      p2m: "P2M",
+    };
+
+    return key
+      .split("_")
+      .map((part) => {
+        const lower = part.toLowerCase();
+        if (tokenMap[lower]) return tokenMap[lower];
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+      })
+      .join("_");
+  };
+
   const handleViewError = async (key: string) => {
     try {
       const detail = await apiClient.getUploadValidationDetail(key, metadata?.run_id);
@@ -148,6 +174,22 @@ export default function ViewStatus() {
     uploadStatusData[0]?.files?.filter((f: any) => f.required).every((f: any) => f.success > 0) ?? false;
   const hasAnyUploads =
     uploadStatusData.some((section: any) => section.files.some((f: any) => f.uploaded > 0)) ?? false;
+  const dataRowErrors = validationDetails.flatMap((detail: any) =>
+    (detail?.row_errors || []).map((err: any) => ({
+      file_name: detail.file_name,
+      ...err,
+    }))
+  );
+  const getRequiredRowsDisplay = (detail: any) =>
+    detail?.required_rows_display ?? detail?.required_rows ?? detail?.uploaded_rows ?? "-";
+  const getErrorDisplay = (detail: any, summary?: any) => {
+    if (detail?.error_message) return detail.error_message;
+    if (detail?.validation_error) return detail.validation_error;
+    if (detail?.row_errors?.length) return `${detail.row_errors.length} row-level issue(s)`;
+    if (detail?.validation_warnings?.length) return detail.validation_warnings.join("; ");
+    if (summary?.key_error_message) return summary.key_error_message;
+    return "-";
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -282,7 +324,7 @@ export default function ViewStatus() {
                 <TableBody>
                   {validationSummary.map((row) => (
                     <TableRow key={row.key}>
-                      <TableCell className="font-medium">{row.key}</TableCell>
+                      <TableCell className="font-medium">{formatFileType(row.key)}</TableCell>
                       <TableCell className="text-center">{row.required_count}</TableCell>
                       <TableCell className="text-center">{row.uploaded_count}</TableCell>
                       <TableCell className="text-center">
@@ -318,14 +360,14 @@ export default function ViewStatus() {
 
       {/* Error Details Dialog */}
       <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
-        <DialogContent>
+        <DialogContent className="w-[95vw] max-w-6xl max-h-[88vh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>Error Details</DialogTitle>
             <DialogDescription>
               Information about the upload error
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 overflow-auto pr-1">
             {validationDetails.length === 0 ? (
               <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
                 <p className="text-sm text-red-800">
@@ -333,61 +375,102 @@ export default function ViewStatus() {
                 </p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>File Name</TableHead>
-                    <TableHead className="text-center">Required Rows</TableHead>
-                    <TableHead className="text-center">Uploaded Rows</TableHead>
-                    <TableHead className="text-center">Uploaded By</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {validationDetails.map((detail) => (
-                    <TableRow key={detail.file_name}>
-                      <TableCell className="font-medium">{detail.file_name}</TableCell>
-                      <TableCell className="text-center">{detail.required_rows ?? "-"}</TableCell>
-                      <TableCell className="text-center">{detail.uploaded_rows ?? "-"}</TableCell>
-                      <TableCell className="text-center">{detail.uploaded_by || "AUTO"}</TableCell>
-                      <TableCell className="text-center">
-                        {!rollbackedFiles.has(detail.file_name) ? (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={async () => {
-                              try {
-                                await apiClient.rollbackIngestion(metadata?.run_id, detail.file_name);
-                                const next = new Set(rollbackedFiles);
-                                next.add(detail.file_name);
-                                setRollbackedFiles(next);
-                              } catch (err) {
-                                console.error("Rollback failed", err);
-                              }
-                            }}
-                          >
-                            Rollback
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              window.location.href = "/file-upload";
-                            }}
-                          >
-                            Re-upload
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <div className="space-y-4">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>File Name</TableHead>
+                        <TableHead className="text-center">Required Rows</TableHead>
+                        <TableHead className="text-center">Uploaded Rows</TableHead>
+                        <TableHead className="text-center">Uploaded By</TableHead>
+                        <TableHead>Error</TableHead>
+                        <TableHead className="text-center">Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {validationDetails.map((detail) => (
+                        <TableRow key={detail.file_name}>
+                          <TableCell className="font-medium whitespace-nowrap">{detail.file_name}</TableCell>
+                          <TableCell className="text-center">{getRequiredRowsDisplay(detail)}</TableCell>
+                          <TableCell className="text-center">{detail.uploaded_rows ?? "-"}</TableCell>
+                          <TableCell className="text-center">{detail.uploaded_by || "AUTO"}</TableCell>
+                          <TableCell className="max-w-[340px] text-xs text-red-700">
+                            {getErrorDisplay(detail, selectedError)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            {!rollbackedFiles.has(detail.file_name) ? (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={async () => {
+                                  try {
+                                    await apiClient.rollbackIngestion(metadata?.run_id, detail.file_name);
+                                    const next = new Set(rollbackedFiles);
+                                    next.add(detail.file_name);
+                                    setRollbackedFiles(next);
+                                    toast({
+                                      title: "Rollback successful",
+                                      description: `${detail.file_name} removed. Re-upload from File Upload page.`,
+                                    });
+                                  } catch (err: any) {
+                                    console.error("Rollback failed", err);
+                                    toast({
+                                      title: "Rollback failed",
+                                      description: err?.response?.data?.detail || "Failed to rollback file.",
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }}
+                              >
+                                Rollback
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  window.location.href = "/file-upload";
+                                }}
+                              >
+                                Re-upload
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                {dataRowErrors.length > 0 ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                    <p className="text-sm font-semibold text-red-800 mb-2">
+                      Row-Level Validation Errors ({dataRowErrors.length})
+                    </p>
+                    <div className="max-h-64 overflow-auto space-y-1 text-xs text-red-800">
+                      {dataRowErrors.map((err: any, idx: number) => (
+                        <div key={`${err.file_name}-${err.row}-${idx}`}>
+                          {err.file_name} | Row {err.row} | {err.column}: {err.error}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             )}
-            <Button className="w-full" onClick={() => setErrorDialogOpen(false)}>
-              Close
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  window.location.href = "/file-upload";
+                }}
+              >
+                Open Re-upload
+              </Button>
+              <Button className="flex-1" onClick={() => setErrorDialogOpen(false)}>
+                Close
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

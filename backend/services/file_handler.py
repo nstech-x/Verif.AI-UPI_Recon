@@ -38,6 +38,7 @@ class FileHandler:
             'switch': ['switch', 'switch_file', 'switch data', 'switch-data'],
             'npci_inward': ['npci_inward', 'npci inward', 'npci-inward', 'npciinward', 'npci inward remittance'],
             'npci_outward': ['npci_outward', 'npci outward', 'npci-outward', 'npcioutward', 'npci outward remittance'],
+            'drc': ['drc', 'drc_report', 'drc report'],
             'ntsl': ['ntsl', 'ntsl_file', 'ntsl data', 'national', 'national_switch'],
             'adjustment': ['adjustment', 'adjustments', 'adj', 'adjustment_file']
         }
@@ -221,6 +222,7 @@ class FileHandler:
             'npci_outward': ['npci_outward', 'npci outward', 'npci-outward', 'npcioutward', 'npci outward remittance', 'npci raw outward'],
             'npci_merchant_inward': ['npci merchant inward', 'merchant inward', 'npci_merchant_inward'],
             'npci_merchant_outward': ['npci merchant outward', 'merchant outward', 'npci_merchant_outward'],
+            'drc': ['drc', 'drc_report', 'drc report'],
             'ntsl': ['ntsl', 'ntsl_file', 'ntsl data', 'national', 'national_switch', 'ntsl settlement'],
             'adjustment': ['adjustment', 'adjustments', 'adj', 'adjustment_file', 'credit adjustment', 'debit adjustment']
         }
@@ -331,6 +333,8 @@ class FileHandler:
             return self._validate_ntsl_file(df_mapped, file_type)
         elif 'adjustment' in file_type:
             return self._validate_adjustment_file(df_mapped, file_type)
+        elif 'drc' in file_type:
+            return self._validate_drc_file(df_mapped)
 
         return True, ''
 
@@ -468,6 +472,14 @@ class FileHandler:
 
         return True, ''
 
+    def _validate_drc_file(self, df: pd.DataFrame) -> (bool, str):
+        """Validate DRC file content in expected NPCI DRC format."""
+        required = ['RRN', 'Amount', 'Tran_Date']
+        for col in required:
+            if col not in df.columns or df[col].isnull().all():
+                return False, f'DRC file missing required column: {col}'
+        return True, ''
+
     def _determine_file_type(self, filename: str, file_type_mapping: Dict) -> str:
         """Determine file type using enhanced pattern matching"""
         filename_lower = filename.lower().strip()
@@ -502,6 +514,8 @@ class FileHandler:
                 return 'npci_outward'
             else:
                 return 'npci_general'
+        elif 'drc' in filename_lower:
+            return 'drc'
         elif 'ntsl' in filename_lower or 'national' in filename_lower:
             return 'ntsl'
         elif 'adjust' in filename_lower:
@@ -529,6 +543,8 @@ class FileHandler:
             return f"npci_inward_{timestamp}{extension}"
         elif file_type == 'npci_outward':
             return f"npci_outward_{timestamp}{extension}"
+        elif file_type == 'drc':
+            return f"drc_{timestamp}{extension}"
         elif file_type == 'ntsl':
             return f"ntsl_{timestamp}{extension}"
         elif file_type == 'adjustment':

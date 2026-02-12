@@ -151,8 +151,10 @@ export const apiClient = {
     cbs_inward: File;
     cbs_outward: File;
     switch: File;
+    npci_bulk?: File | File[];
     npci_inward?: File | File[];
     npci_outward?: File | File[];
+    drc?: File | File[];
     ntsl?: File | File[];
     adjustment?: File | File[];
     cbs_balance?: string;
@@ -430,9 +432,13 @@ export const apiClient = {
   },
 
   rollbackIngestion: async (runId: string, filename: string, error: string = "User initiated rollback"): Promise<any> => {
-    const response: AxiosResponse = await api.post(
-      `/api/v1/rollback/ingestion?run_id=${runId}&filename=${filename}&error=${encodeURIComponent(error)}`
-    );
+    const response: AxiosResponse = await api.post('/api/v1/rollback/ingestion', null, {
+      params: {
+        run_id: runId,
+        filename,
+        error,
+      },
+    });
     return response.data;
   },
 

@@ -21,6 +21,7 @@ from services.report_catalog import (
     generate_unmatched_transactions_report,
     generate_adjustment_listing,
     generate_ttum_listing,
+    generate_switch_status_update,
     generate_annexure_iv_split,
     generate_mis_report,
     generate_datewise_income_expense,
@@ -82,22 +83,9 @@ async def download_gl_statement(user: dict = Depends(get_current_user), run_id: 
             raise HTTPException(status_code=404, detail="No runs found")
         target = run_id if run_id else sorted(runs)[-1]
 
-        # Look for GL statement in OUTPUT_DIR first, then UPLOAD_DIR
-        gl_files = []
-        out_gl = os.path.join(OUTPUT_DIR, target, 'gl_statement')
-        if os.path.exists(out_gl):
-            gl_files = [os.path.join(out_gl, f) for f in os.listdir(out_gl) if f.endswith(('.xlsx', '.csv'))]
-
-        if not gl_files:
-            up_gl = os.path.join(UPLOAD_DIR, target, 'gl_statement')
-            if os.path.exists(up_gl):
-                gl_files = [os.path.join(up_gl, f) for f in os.listdir(up_gl) if f.endswith(('.xlsx', '.csv'))]
-
-        if not gl_files:
+        gl_file = find_gl_statement(target)
+        if not gl_file:
             raise HTTPException(status_code=404, detail="GL statement not found")
-
-        # Return first GL file found
-        gl_file = gl_files[0]
 
         # Audit log download
         audit.log_data_export(target, os.path.basename(gl_file), 'gl_statement', user_id=user.get('username', 'system'))
@@ -717,10 +705,7 @@ async def download_report_by_key(
         elif report_key == "ttum_payable_outward":
             path = generate_ttum_listing(target, "OUTWARD")
         elif report_key == "switch_status_update":
-            # Prefer generated switch update file in reports dir
-            candidate = os.path.join(OUTPUT_DIR, target, "reports", "Switch_Update_File.csv")
-            if os.path.exists(candidate):
-                path = candidate
+            path = generate_switch_status_update(target)
         elif report_key == "annexure_iv_tcc_ret":
             outputs = generate_annexure_iv_split(target)
             path = outputs.get("tcc_ret")

@@ -6,6 +6,7 @@ Supports: Full, Ingestion, Mid-Recon, Cycle-Wise, and Accounting Rollback
 import os
 import json
 import shutil
+import stat
 try:
     import portalocker
 except Exception:
@@ -366,13 +367,24 @@ class RollbackManager:
                 # Don't fail the rollback if file is already gone
                 actual_filename = failed_filename
             else:
-                # Remove the failed file
+                # Remove the failed file (uploaded files are saved read-only by design).
                 try:
+                    # Make writable on Windows/Unix before delete to avoid WinError 5.
+                    try:
+                        os.chmod(failed_file_path, stat.S_IWRITE)
+                    except Exception:
+                        pass
                     os.remove(failed_file_path)
                     logger.info(f"Ingestion rollback: Removed {actual_filename} from {run_id}")
                 except Exception as remove_error:
-                    logger.error(f"Failed to remove file {failed_file_path}: {remove_error}")
-                    raise ValueError(f"Could not remove failed file: {remove_error}")
+                    # Retry once after forcing writable again.
+                    try:
+                        os.chmod(failed_file_path, stat.S_IWRITE)
+                        os.remove(failed_file_path)
+                        logger.info(f"Ingestion rollback retry succeeded: Removed {actual_filename} from {run_id}")
+                    except Exception as retry_error:
+                        logger.error(f"Failed to remove file {failed_file_path}: {retry_error}")
+                        raise ValueError(f"Could not remove failed file: {retry_error}")
 
             # Update metadata
             metadata_path = os.path.join(run_folder, "metadata.json")

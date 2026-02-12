@@ -49,6 +49,7 @@ async def upload_files(
     switch: UploadFile = File(None),
     npci_inward: UploadFile = File(None),
     npci_outward: UploadFile = File(None),
+    drc: UploadFile = File(None),
     ntsl: UploadFile = File(None),
     adjustment: UploadFile = File(None),
     files: List[UploadFile] = File(None),
@@ -72,6 +73,7 @@ async def upload_files(
         optional_multi_files: Dict[str, List[UploadFile]] = {
             'npci_inward': [],
             'npci_outward': [],
+            'drc': [],
             'ntsl': [],
             'adjustment': [],
         }
@@ -82,6 +84,8 @@ async def upload_files(
             optional_multi_files['npci_inward'].append(npci_inward)
         if npci_outward:
             optional_multi_files['npci_outward'].append(npci_outward)
+        if drc:
+            optional_multi_files['drc'].append(drc)
         if ntsl:
             optional_multi_files['ntsl'].append(ntsl)
         if adjustment:
@@ -122,6 +126,9 @@ async def upload_files(
                     assigned = True
                 elif 'npci' in fname and 'out' in fname:
                     optional_multi_files['npci_outward'].append(upfile)
+                    assigned = True
+                elif 'drc' in fname:
+                    optional_multi_files['drc'].append(upfile)
                     assigned = True
                 elif 'ntsl' in fname or 'national' in fname:
                     optional_multi_files['ntsl'].append(upfile)
@@ -164,7 +171,7 @@ async def upload_files(
 
         def validate_filename_cycle_date(file_type: str, filename: str) -> Optional[str]:
             """Validate filename format and date for NPCI/NTSL/Adjustment files."""
-            if file_type not in ('npci_inward', 'npci_outward', 'ntsl', 'adjustment'):
+            if file_type not in ('npci_inward', 'npci_outward', 'ntsl', 'adjustment', 'drc'):
                 return None
 
             # Prefer new ISSR/ACQR naming convention
@@ -219,6 +226,11 @@ async def upload_files(
                     return "NPCI outward file name must include 'outward'"
 
             # NTSL cycle optional; no strict validation beyond presence of file
+            if file_type == 'drc':
+                import re
+                if not re.match(r'^DRCREPORT[A-Z0-9]{4}\d{6}', filename, flags=re.IGNORECASE):
+                    return "DRC filename must follow DRCReport + BANK + DDMMYY"
+
             return None
 
         def iter_files():
@@ -478,10 +490,22 @@ async def get_upload_validation(run_id: Optional[str] = None):
 
             counts[key] = counts.get(key, 0) + 1
 
+        def _path_for_file(info: Dict) -> Optional[str]:
+            legacy = info.get("legacy_path")
+            if legacy and os.path.exists(legacy):
+                return legacy
+            std_name = info.get("standardized_name")
+            if std_name:
+                candidate = os.path.join(UPLOAD_DIR, run_id, std_name)
+                if os.path.exists(candidate):
+                    return candidate
+            return None
+
         summary = []
         for key, required in required_counts.items():
             uploaded = counts.get(key, 0)
             row_error = False
+            data_error = False
             req_rows = required_rows.get(key)
             if req_rows is not None:
                 for original_name, info in files_detail.items():
@@ -496,12 +520,37 @@ async def get_upload_validation(run_id: Optional[str] = None):
                     if info.get("row_count", 0) != req_rows:
                         row_error = True
                         break
+
+            # Row-level data quality validation (RRN length, numeric amount, etc.)
+            for original_name, info in files_detail.items():
+                file_type = info.get("file_type", "unknown")
+                parsed = info.get("parsed") or parse_upi_filename(original_name) or {}
+                txn_type = (parsed.get("txn_type") or "").lower()
+                computed_key = file_type
+                if file_type.startswith("npci_") and txn_type:
+                    computed_key = f"{file_type}_{txn_type}"
+                if computed_key != key:
+                    continue
+                fpath = _path_for_file(info)
+                if not fpath:
+                    continue
+                try:
+                    with open(fpath, "rb") as fb:
+                        content = fb.read()
+                    vr = await validate_file_columns(content, original_name, file_type)
+                    if (not vr.get("valid", True)) or bool(vr.get("row_errors")):
+                        data_error = True
+                        break
+                except Exception:
+                    data_error = True
+                    break
             summary.append({
                 "key": key,
                 "required_count": required,
                 "uploaded_count": uploaded,
-                "error": uploaded < required or row_error,
+                "error": uploaded < required or row_error or data_error,
                 "row_error": row_error,
+                "data_error": data_error,
             })
 
         return {
@@ -536,8 +585,22 @@ async def get_upload_validation_detail(run_id: Optional[str] = None, key: Option
 
         requirements = _load_requirements()
         required_rows = requirements.get("required_rows", {})
+        required_counts = requirements.get("required_counts", {})
         required_row_count = required_rows.get(key)
+        required_count = required_counts.get(key)
 
+        def _path_for_file(info: Dict) -> Optional[str]:
+            legacy = info.get("legacy_path")
+            if legacy and os.path.exists(legacy):
+                return legacy
+            std_name = info.get("standardized_name")
+            if std_name:
+                candidate = os.path.join(UPLOAD_DIR, run_id, std_name)
+                if os.path.exists(candidate):
+                    return candidate
+            return None
+
+        uploaded_count = 0
         details = []
         for original_name, info in files_detail.items():
             file_type = info.get("file_type", "unknown")
@@ -551,19 +614,58 @@ async def get_upload_validation_detail(run_id: Optional[str] = None, key: Option
             if computed_key != key:
                 continue
 
+            uploaded_count += 1
             row_count = info.get("row_count", 0)
             row_error = required_row_count is not None and row_count != required_row_count
+            row_errors = []
+            validation_error = None
+            validation_warnings = []
+            fpath = _path_for_file(info)
+            if fpath:
+                try:
+                    with open(fpath, "rb") as fb:
+                        content = fb.read()
+                    vr = await validate_file_columns(content, original_name, file_type)
+                    row_errors = vr.get("row_errors", []) or []
+                    validation_warnings = vr.get("warnings", []) or []
+                    if not vr.get("valid", True):
+                        validation_error = vr.get("error")
+                except Exception as e:
+                    validation_error = str(e)
+
             details.append({
                 "file_name": original_name,
                 "required_rows": required_row_count,
+                "required_rows_display": required_row_count if required_row_count is not None else row_count,
                 "uploaded_rows": row_count,
                 "uploaded_by": info.get("uploaded_by", metadata.get("uploaded_by", "AUTO")),
-                "error": row_error,
+                "error": row_error or bool(row_errors) or bool(validation_error) or bool(validation_warnings),
+                "validation_error": validation_error,
+                "validation_warnings": validation_warnings,
+                "row_errors": row_errors,
+                "row_error_count": len(row_errors),
+                "error_message": (
+                    validation_error
+                    or (f"{len(row_errors)} row-level issue(s)" if row_errors else None)
+                    or ("; ".join(validation_warnings) if validation_warnings else None)
+                ),
             })
+
+        key_error_message = None
+        if required_count is not None and uploaded_count < required_count:
+            key_error_message = f"Missing file(s): required {required_count}, uploaded {uploaded_count}"
+        elif required_row_count is not None and any(d.get("uploaded_rows") != required_row_count for d in details):
+            key_error_message = f"Row count mismatch: each file should have {required_row_count} rows"
+        elif any(d.get("error") for d in details):
+            key_error_message = "Validation error found in one or more files"
 
         return {
             "run_id": run_id,
             "status": "success",
+            "key": key,
+            "required_count": required_count,
+            "uploaded_count": uploaded_count,
+            "key_error_message": key_error_message,
             "required_rows": required_row_count,
             "details": details,
         }

@@ -6,7 +6,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { Loader2, CheckCircle2, AlertCircle, Search, RefreshCw, ZoomIn } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Textarea } from "@/components/ui/textarea";
 import { apiClient } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { generateDemoUnmatchedTransactions } from "@/lib/demoData";
@@ -64,7 +63,6 @@ interface ForceMatchState {
   panelRHSColumn: ComparableColumn;
   matchingMode: "best_match" | "relaxed_match";
   showRCRB: boolean;
-  matchComments: string;
 }
 
 type ForceMatchAction =
@@ -83,8 +81,7 @@ type ForceMatchAction =
   | { type: 'MATCH_START' }
   | { type: 'MATCH_FINISH' }
   | { type: 'SET_MATCHING_MODE'; payload: "best_match" | "relaxed_match" }
-  | { type: 'TOGGLE_RC_RB'; payload: boolean }
-  | { type: 'SET_MATCH_COMMENTS'; payload: string };
+  | { type: 'TOGGLE_RC_RB'; payload: boolean };
 
 const initialState: ForceMatchState = {
   transactions: [],
@@ -101,7 +98,6 @@ const initialState: ForceMatchState = {
   panelRHSColumn: "amount",
   matchingMode: "best_match",
   showRCRB: false,
-  matchComments: "",
 };
 
 const forceMatchReducer = (state: ForceMatchState, action: ForceMatchAction): ForceMatchState => {
@@ -117,9 +113,9 @@ const forceMatchReducer = (state: ForceMatchState, action: ForceMatchAction): Fo
     case 'SET_STATUS_FILTER':
       return { ...state, statusFilter: action.payload };
     case 'OPEN_DUAL_PANEL':
-      return { ...state, showDualPanelDialog: true, selectedTransaction: action.payload, matchComments: "" };
+      return { ...state, showDualPanelDialog: true, selectedTransaction: action.payload };
     case 'CLOSE_DUAL_PANEL':
-      return { ...state, showDualPanelDialog: false, selectedTransaction: null, isMatching: false, matchComments: "" };
+      return { ...state, showDualPanelDialog: false, selectedTransaction: null, isMatching: false };
     case 'SET_PANEL_LHS':
       return { ...state, panelLHS: action.payload };
     case 'SET_PANEL_RHS':
@@ -138,8 +134,6 @@ const forceMatchReducer = (state: ForceMatchState, action: ForceMatchAction): Fo
       return { ...state, matchingMode: action.payload };
     case 'TOGGLE_RC_RB':
       return { ...state, showRCRB: action.payload };
-    case 'SET_MATCH_COMMENTS':
-      return { ...state, matchComments: action.payload };
     default:
       return state;
   }
@@ -253,9 +247,6 @@ export default function ForceMatch() {
     zeroDifferenceValid,
     panelLHSColumn,
     panelRHSColumn,
-    matchingMode,
-    showRCRB,
-    matchComments,
   } = state;
 
   useEffect(() => {
@@ -684,18 +675,6 @@ export default function ForceMatch() {
                 )}
               </Alert>
 
-              <div>
-                <label className="text-sm font-medium block mb-2">Reason/Comments <span className="text-red-500">*</span></label>
-                <Textarea
-                  placeholder="Enter reason for this match (required)"
-                  value={matchComments}
-                  onChange={(e) => dispatch({ type: 'SET_MATCH_COMMENTS', payload: e.target.value })}
-                  className="min-h-[100px]"
-                />
-                {!matchComments.trim() && (
-                  <p className="text-xs text-red-500 mt-1">Reason/Comments is required before confirming the match</p>
-                )}
-              </div>
             </div>
             <div className="p-6 border-t flex justify-between items-center">
               <div>
@@ -713,8 +692,8 @@ export default function ForceMatch() {
                 <Button variant="outline" onClick={() => dispatch({ type: 'CLOSE_DUAL_PANEL' })}>Cancel</Button>
                 <Button
                   onClick={confirmForceMatch}
-                  disabled={isMatching || !zeroDifferenceValid || panelLHS === panelRHS || selectedTransaction[panelLHS]?.amount !== selectedTransaction[panelRHS]?.amount || !matchComments.trim()}
-                  title={!matchComments.trim() ? 'Please provide a reason/comment for this match' : selectedTransaction[panelLHS]?.amount !== selectedTransaction[panelRHS]?.amount ? 'Amounts must be equal to match' : ''}
+                  disabled={isMatching || !zeroDifferenceValid || panelLHS === panelRHS || selectedTransaction[panelLHS]?.amount !== selectedTransaction[panelRHS]?.amount}
+                  title={selectedTransaction[panelLHS]?.amount !== selectedTransaction[panelRHS]?.amount ? 'Amounts must be equal to match' : ''}
                 >
                   {isMatching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                   Confirm Match

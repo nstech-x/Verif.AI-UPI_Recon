@@ -47,16 +47,99 @@ def _save_proposals(run_id: str, proposals):
         return False
 
 
+def _latest_run_id() -> Optional[str]:
+    runs = []
+    try:
+        runs.extend([d for d in os.listdir(UPLOAD_DIR) if d.startswith('RUN_')])
+    except Exception:
+        pass
+    try:
+        runs.extend([d for d in os.listdir(OUTPUT_DIR) if d.startswith('RUN_')])
+    except Exception:
+        pass
+    if not runs:
+        return None
+    return sorted(set(runs))[-1]
+
+
+def _find_recon_output_path(run_id: str) -> Optional[str]:
+    # Prefer UPI output location
+    out_path = os.path.join(OUTPUT_DIR, run_id, "recon_output.json")
+    if os.path.exists(out_path):
+        return out_path
+
+    # Legacy fallback inside upload directory
+    run_root = os.path.join(UPLOAD_DIR, run_id)
+    if os.path.isdir(run_root):
+        for root_dir, dirs, files in os.walk(run_root):
+            if 'recon_output.json' in files:
+                return os.path.join(root_dir, 'recon_output.json')
+    return None
+
+
+def _rrn_exists_in_recon(recon_data, rrn: str) -> bool:
+    if not rrn:
+        return False
+    if isinstance(recon_data, dict):
+        if 'exceptions' in recon_data:
+            for exc in recon_data.get('exceptions', []):
+                if exc.get('rrn') == rrn or exc.get('RRN') == rrn:
+                    return True
+        if rrn in recon_data:
+            return True
+    elif isinstance(recon_data, list):
+        for rec in recon_data:
+            if isinstance(rec, dict) and (rec.get('rrn') == rrn or rec.get('RRN') == rrn):
+                return True
+    return False
+
+
+def _apply_force_match(recon_data, rrn: str, approved_by: str, proposal_id: Optional[str] = None):
+    now = datetime.utcnow().isoformat()
+    updated = False
+
+    if isinstance(recon_data, dict) and 'exceptions' in recon_data:
+        for exc in recon_data.get('exceptions', []):
+            if exc.get('rrn') == rrn or exc.get('RRN') == rrn:
+                exc['status'] = 'FORCE_MATCHED'
+                exc['force_matched'] = True
+                exc['force_match_approved_by'] = approved_by
+                exc['force_match_approved_at'] = now
+                if proposal_id:
+                    exc['force_match_proposal_id'] = proposal_id
+                updated = True
+                break
+    elif isinstance(recon_data, dict) and rrn in recon_data:
+        recon_data[rrn]['status'] = 'FORCE_MATCHED'
+        recon_data[rrn]['force_matched'] = True
+        recon_data[rrn]['force_match_approved_by'] = approved_by
+        recon_data[rrn]['force_match_approved_at'] = now
+        if proposal_id:
+            recon_data[rrn]['force_match_proposal_id'] = proposal_id
+        updated = True
+    elif isinstance(recon_data, list):
+        for rec in recon_data:
+            if isinstance(rec, dict) and (rec.get('rrn') == rrn or rec.get('RRN') == rrn):
+                rec['status'] = 'FORCE_MATCHED'
+                rec['force_matched'] = True
+                rec['force_match_approved_by'] = approved_by
+                rec['force_match_approved_at'] = now
+                if proposal_id:
+                    rec['force_match_proposal_id'] = proposal_id
+                updated = True
+                break
+
+    return recon_data, updated
+
+
 @router.get("/proposals")
 async def get_force_match_proposals(run_id: Optional[str] = None, user: dict = Depends(get_current_user)):
     """Get all force-match proposals for a run (or latest if not specified)"""
     try:
         if not run_id:
-            # Get latest run
-            runs = [d for d in os.listdir(UPLOAD_DIR) if d.startswith('RUN_')]
-            if not runs:
+            run_id = _latest_run_id()
+            if not run_id:
                 raise HTTPException(status_code=404, detail="No runs found")
-            run_id = sorted(runs)[-1]
 
         proposals = _load_proposals(run_id)
 
@@ -65,19 +148,15 @@ async def get_force_match_proposals(run_id: Optional[str] = None, user: dict = D
             prop_rrn = prop.get('rrn')
             try:
                 # Try to get full transaction data
-                run_root = os.path.join(UPLOAD_DIR, run_id)
-                for root_dir, dirs, files in os.walk(run_root):
-                    if 'recon_output.json' in files:
-                        with open(os.path.join(root_dir, 'recon_output.json'), 'r') as f:
-                            recon_data = json.load(f)
-
-                        # Find transaction with matching RRN
-                        if isinstance(recon_data, dict) and 'exceptions' in recon_data:
-                            for exc in recon_data['exceptions']:
-                                if exc.get('rrn') == prop_rrn:
-                                    prop['transaction_details'] = exc
-                                    break
-                        break
+                recon_path = _find_recon_output_path(run_id)
+                if recon_path:
+                    with open(recon_path, 'r') as f:
+                        recon_data = json.load(f)
+                    if isinstance(recon_data, dict) and 'exceptions' in recon_data:
+                        for exc in recon_data['exceptions']:
+                            if exc.get('rrn') == prop_rrn:
+                                prop['transaction_details'] = exc
+                                break
             except Exception:
                 pass  # If lookup fails, just return proposal as-is
 
@@ -104,12 +183,17 @@ async def propose_force_match(request: Request, user: dict = Depends(get_current
             if payload is None:
                 payload = {}
         except Exception:
+            payload = {}
+
+        if not payload:
             try:
                 form = await request.form()
-                payload = dict(form)
+                payload = dict(form) if form else {}
             except Exception:
-                # fallback to query params
-                payload = dict(request.query_params)
+                payload = {}
+
+        if not payload:
+            payload = dict(request.query_params)
         rrn = payload.get('rrn')
         action = payload.get('action')
         direction = payload.get('direction')
@@ -120,32 +204,41 @@ async def propose_force_match(request: Request, user: dict = Depends(get_current
             raise HTTPException(status_code=400, detail='rrn and action are required')
 
         if not run_id:
-            raise HTTPException(status_code=400, detail='run_id is required')
+            run_id = _latest_run_id()
+            if not run_id:
+                raise HTTPException(status_code=404, detail='No runs found')
 
         # Validate RRN exists in the reconciliation results
-        rrn_found = False
-        run_root = os.path.join(UPLOAD_DIR, run_id)
-        for root_dir, dirs, files in os.walk(run_root):
-            if 'recon_output.json' in files:
-                with open(os.path.join(root_dir, 'recon_output.json'), 'r') as f:
-                    recon_data = json.load(f)
-                    if isinstance(recon_data, dict):
-                        if 'exceptions' in recon_data:
-                            # UPI format - check exceptions array
-                            for exc in recon_data['exceptions']:
-                                if exc.get('rrn') == rrn or exc.get('RRN') == rrn:
-                                    rrn_found = True
-                                    break
-                        else:
-                            # Legacy format - check if RRN key exists
-                            if rrn in recon_data:
-                                rrn_found = True
-                                break
-                if rrn_found:
-                    break
+        recon_path = _find_recon_output_path(run_id)
+        if not recon_path:
+            raise HTTPException(status_code=404, detail=f'recon_output.json not found for run {run_id}')
 
-        if not rrn_found:
+        with open(recon_path, 'r') as f:
+            recon_data = json.load(f)
+
+        if not _rrn_exists_in_recon(recon_data, rrn):
             raise HTTPException(status_code=404, detail=f'RRN {rrn} not found in reconciliation results')
+
+        # Legacy direct force-match flow used by frontend panel
+        source1 = payload.get('source1')
+        source2 = payload.get('source2')
+        if source1 and source2:
+            user_id = user.get('username', 'system')
+            recon_data, updated = _apply_force_match(recon_data, rrn, approved_by=user_id, proposal_id=None)
+            if not updated:
+                raise HTTPException(status_code=404, detail=f'RRN {rrn} not found for force match update')
+            with open(recon_path, 'w') as wf:
+                json.dump(recon_data, wf, indent=2)
+            try:
+                audit.log_force_match(run_id, rrn, action, user_id=user_id, status='approved')
+            except Exception:
+                pass
+            return JSONResponse(content={
+                'status': 'success',
+                'message': f'RRN {rrn} force matched between {source1} and {source2}',
+                'action': action,
+                'rrn': rrn
+            })
 
         proposals = _load_proposals(run_id)
         prop_id = f"PROP_{int(time.time())}_{len(proposals)+1}"
@@ -229,47 +322,11 @@ async def approve_force_match(request: Request, user: dict = Depends(get_current
 
         # apply change to recon_output.json (mark rrn FORCE_MATCHED)
         try:
-            run_root = os.path.join(UPLOAD_DIR, found.get('run_id'))
-            # find nested recon_output.json
-            recon_path = None
-            for root_dir, dirs, files in os.walk(run_root):
-                if 'recon_output.json' in files:
-                    recon_path = os.path.join(root_dir, 'recon_output.json')
-                    break
+            recon_path = _find_recon_output_path(found.get('run_id'))
             if recon_path and os.path.exists(recon_path):
                 with open(recon_path, 'r') as rf:
                     ro = json.load(rf)
-
-                # Handle UPI format (exceptions array)
-                if isinstance(ro, dict) and 'exceptions' in ro:
-                    exceptions = ro.get('exceptions', [])
-                    for i, exc in enumerate(exceptions):
-                        if exc.get('rrn') == found.get('rrn') or exc.get('RRN') == found.get('rrn'):
-                            # Mark as force matched by updating status and adding force_match flag
-                            exc['status'] = 'FORCE_MATCHED'
-                            exc['force_matched'] = True
-                            exc['force_match_proposal_id'] = found.get('proposal_id')
-                            exc['force_match_approved_by'] = checker
-                            exc['force_match_approved_at'] = datetime.utcnow().isoformat()
-                            break
-                    ro['exceptions'] = exceptions
-                # Handle legacy format (RRN keyed dict)
-                elif isinstance(ro, dict) and found.get('rrn') in ro:
-                    ro[found.get('rrn')]['status'] = 'FORCE_MATCHED'
-                    ro[found.get('rrn')]['force_matched'] = True
-                    ro[found.get('rrn')]['force_match_proposal_id'] = found.get('proposal_id')
-                    ro[found.get('rrn')]['force_match_approved_by'] = checker
-                    ro[found.get('rrn')]['force_match_approved_at'] = datetime.utcnow().isoformat()
-                else:
-                    # try list format
-                    for rec in ro:
-                        if isinstance(rec, dict) and (rec.get('rrn') == found.get('rrn') or rec.get('RRN') == found.get('rrn')):
-                            rec['status'] = 'FORCE_MATCHED'
-                            rec['force_matched'] = True
-                            rec['force_match_proposal_id'] = found.get('proposal_id')
-                            rec['force_match_approved_by'] = checker
-                            rec['force_match_approved_at'] = datetime.utcnow().isoformat()
-                            break
+                ro, _ = _apply_force_match(ro, found.get('rrn'), approved_by=checker, proposal_id=found.get('proposal_id'))
 
                 with open(recon_path, 'w') as wf:
                     json.dump(ro, wf, indent=2)

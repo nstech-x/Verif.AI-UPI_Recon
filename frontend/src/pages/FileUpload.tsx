@@ -20,6 +20,9 @@ export default function FileUpload() {
   const [cbsBalance, setCbsBalance] = useState("");
   const [switchFile, setSwitchFile] = useState<File | null>(null);
   const [npciFiles, setNpciFiles] = useState<Record<string, File[]>>({});
+  const [ntslFiles, setNtslFiles] = useState<File[]>([]);
+  const [adjustmentFiles, setAdjustmentFiles] = useState<File[]>([]);
+  const [drcFiles, setDrcFiles] = useState<File[]>([]);
 
   const uploadMutation = useMutation({
     mutationFn: async () => {
@@ -36,7 +39,6 @@ export default function FileUpload() {
         transaction_date: date,
       };
 
-      // Add optional NPCI files only if they were selected
       const npciInward = [
         ...(npciFiles.npci_inward_p2p || []),
         ...(npciFiles.npci_inward_p2m || []),
@@ -47,12 +49,9 @@ export default function FileUpload() {
       ];
       if (npciInward.length) uploadData.npci_inward = npciInward;
       if (npciOutward.length) uploadData.npci_outward = npciOutward;
-      if (npciFiles.ntsl?.length) uploadData.ntsl = npciFiles.ntsl;
-      const adjustmentFiles = [
-        ...(npciFiles.adjustment || []),
-        ...(npciFiles.drc || []),
-      ];
+      if (ntslFiles.length) uploadData.ntsl = ntslFiles;
       if (adjustmentFiles.length) uploadData.adjustment = adjustmentFiles;
+      if (drcFiles.length) uploadData.drc = drcFiles;
 
       const uploadResult = await apiClient.uploadFiles(uploadData);
 
@@ -89,6 +88,9 @@ export default function FileUpload() {
       setSwitchFile(null);
       setCbsBalance("");
       setNpciFiles({});
+      setNtslFiles([]);
+      setAdjustmentFiles([]);
+      setDrcFiles([]);
     },
     onError: (error: any) => {
       toast({
@@ -113,94 +115,52 @@ export default function FileUpload() {
 
     const validateFilename = (file: File): boolean => {
       const name = (file.name || "").toUpperCase();
-
       const npciMatch = name.match(/^(ISSR|ACQR)(P2P|P2M)[A-Z0-9]{4}(\d{6})_(\d{1,2})C\./);
-      const ntslMatch = name.match(/^UPINTSLP[A-Z0-9]{4}(\d{8})(?:_(\d{1,2})C)?\./);
-      const adjMatch = name.match(/^UPIADJREPORTP[A-Z0-9]{4}(\d{6})\./);
-      const drcMatch = name.match(/^DRCREPORT[A-Z0-9]{4}(\d{6})\./);
 
-      if (fileType.startsWith('npci_')) {
-        if (!npciMatch) {
-          toast({
-            title: "Invalid filename",
-            description: "NPCI filename must follow ISSR/ACQR + P2P/P2M + BANK + DDMMYY + _<cycle>C.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        const direction = npciMatch[1];
-        const txnType = npciMatch[2];
-        if (fileType.includes('inward') && direction !== 'ISSR') {
-          toast({
-            title: "Invalid file direction",
-            description: "NPCI inward files must start with ISSR.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        if (fileType.includes('outward') && direction !== 'ACQR') {
-          toast({
-            title: "Invalid file direction",
-            description: "NPCI outward files must start with ACQR.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        if (fileType.includes('p2p') && txnType !== 'P2P') {
-          toast({
-            title: "Invalid transaction type",
-            description: "NPCI P2P files must include P2P.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        if (fileType.includes('p2m') && txnType !== 'P2M') {
-          toast({
-            title: "Invalid transaction type",
-            description: "NPCI P2M files must include P2M.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        return true;
+      if (!npciMatch) {
+        toast({
+          title: "Invalid filename",
+          description: "NPCI filename must follow ISSR/ACQR + P2P/P2M + BANK + DDMMYY + _<cycle>C.",
+          variant: "destructive",
+        });
+        return false;
       }
 
-      if (fileType === 'ntsl') {
-        if (!ntslMatch) {
-          toast({
-            title: "Invalid filename",
-            description: "NTSL filename must follow UPINTSLP + BANK + DDMMYYYY (_<cycle>C optional).",
-            variant: "destructive",
-          });
-          return false;
-        }
-        return true;
-      }
+      const direction = npciMatch[1];
+      const txnType = npciMatch[2];
 
-      if (fileType === 'adjustment') {
-        if (!adjMatch) {
-          toast({
-            title: "Invalid filename",
-            description: "Adjustment filename must follow UPIADJReportP + BANK + DDMMYY.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        return true;
+      if (fileType.includes('inward') && direction !== 'ISSR') {
+        toast({
+          title: "Invalid file direction",
+          description: "NPCI inward files must start with ISSR.",
+          variant: "destructive",
+        });
+        return false;
       }
-
-      if (fileType === 'drc') {
-        if (!drcMatch) {
-          toast({
-            title: "Invalid filename",
-            description: "DRC filename must follow DRCReport + BANK + DDMMYY.",
-            variant: "destructive",
-          });
-          return false;
-        }
-        return true;
+      if (fileType.includes('outward') && direction !== 'ACQR') {
+        toast({
+          title: "Invalid file direction",
+          description: "NPCI outward files must start with ACQR.",
+          variant: "destructive",
+        });
+        return false;
       }
-
+      if (fileType.includes('p2p') && txnType !== 'P2P') {
+        toast({
+          title: "Invalid transaction type",
+          description: "NPCI P2P files must include P2P.",
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (fileType.includes('p2m') && txnType !== 'P2M') {
+        toast({
+          title: "Invalid transaction type",
+          description: "NPCI P2M files must include P2M.",
+          variant: "destructive",
+        });
+        return false;
+      }
       return true;
     };
 
@@ -211,11 +171,28 @@ export default function FileUpload() {
     });
 
     if (accepted.length === 0) return;
-
-    setNpciFiles(prev => ({
+    setNpciFiles((prev) => ({
       ...prev,
-      [fileType]: accepted
+      [fileType]: accepted,
     }));
+  };
+
+  const handleAuxFileChange = (
+    setter: (files: File[]) => void,
+    pattern: RegExp,
+    errorDescription: string
+  ) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const files = Array.from(e.target.files);
+    const accepted = files.filter((file) => pattern.test((file.name || "").toUpperCase()));
+    if (accepted.length !== files.length) {
+      toast({
+        title: "Invalid filename",
+        description: errorDescription,
+        variant: "destructive",
+      });
+    }
+    if (accepted.length > 0) setter(accepted);
   };
 
   const isUploading = uploadMutation.isPending;
@@ -380,9 +357,9 @@ export default function FileUpload() {
                         <Button variant="link" className="px-0" onClick={() => document.getElementById('ntsl-file')?.click()} disabled={isUploading}>
                           Browse
                         </Button>
-                        {npciFiles.ntsl?.length ? (
+                        {ntslFiles.length ? (
                           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                            {npciFiles.ntsl.map((file) => (
+                            {ntslFiles.map((file) => (
                               <div key={file.name} className="flex items-center gap-2">
                                 <CheckCircle className="h-3 w-3 text-emerald-500" />
                                 {file.name}
@@ -390,7 +367,18 @@ export default function FileUpload() {
                             ))}
                           </div>
                         ) : null}
-                        <input id="ntsl-file" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('ntsl')} />
+                        <input
+                          id="ntsl-file"
+                          type="file"
+                          className="hidden"
+                          accept=".csv,.xlsx"
+                          multiple
+                          onChange={handleAuxFileChange(
+                            setNtslFiles,
+                            /^UPINTSLP[A-Z0-9]{4}(\d{8})(?:_(\d{1,2})C)?\./,
+                            "NTSL filename must follow UPINTSLP + BANK + DDMMYYYY (_<cycle>C optional)."
+                          )}
+                        />
                       </td>
                     </tr>
                     <tr>
@@ -399,9 +387,9 @@ export default function FileUpload() {
                         <Button variant="link" className="px-0" onClick={() => document.getElementById('adjustment-file')?.click()} disabled={isUploading}>
                           Browse
                         </Button>
-                        {npciFiles.adjustment?.length ? (
+                        {adjustmentFiles.length ? (
                           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                            {npciFiles.adjustment.map((file) => (
+                            {adjustmentFiles.map((file) => (
                               <div key={file.name} className="flex items-center gap-2">
                                 <CheckCircle className="h-3 w-3 text-emerald-500" />
                                 {file.name}
@@ -409,7 +397,18 @@ export default function FileUpload() {
                             ))}
                           </div>
                         ) : null}
-                        <input id="adjustment-file" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('adjustment')} />
+                        <input
+                          id="adjustment-file"
+                          type="file"
+                          className="hidden"
+                          accept=".csv,.xlsx"
+                          multiple
+                          onChange={handleAuxFileChange(
+                            setAdjustmentFiles,
+                            /^UPIADJREPORTP[A-Z0-9]{4}(\d{6})\./,
+                            "Adjustment filename must follow UPIADJReportP + BANK + DDMMYY."
+                          )}
+                        />
                       </td>
                     </tr>
                     <tr>
@@ -418,9 +417,9 @@ export default function FileUpload() {
                         <Button variant="link" className="px-0" onClick={() => document.getElementById('drc-file')?.click()} disabled={isUploading}>
                           Browse
                         </Button>
-                        {npciFiles.drc?.length ? (
+                        {drcFiles.length ? (
                           <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                            {npciFiles.drc.map((file) => (
+                            {drcFiles.map((file) => (
                               <div key={file.name} className="flex items-center gap-2">
                                 <CheckCircle className="h-3 w-3 text-emerald-500" />
                                 {file.name}
@@ -428,7 +427,18 @@ export default function FileUpload() {
                             ))}
                           </div>
                         ) : null}
-                        <input id="drc-file" type="file" className="hidden" accept=".csv,.xlsx" multiple onChange={handleNpciFileChange('drc')} />
+                        <input
+                          id="drc-file"
+                          type="file"
+                          className="hidden"
+                          accept=".csv,.xlsx"
+                          multiple
+                          onChange={handleAuxFileChange(
+                            setDrcFiles,
+                            /^DRCREPORT[A-Z0-9]{4}(\d{6})\./,
+                            "DRC filename must follow DRCReport + BANK + DDMMYY."
+                          )}
+                        />
                       </td>
                     </tr>
                   </tbody>
